@@ -90,7 +90,9 @@ contract lending {
     /////////////////
     event AllowedTokenSet(IERC20 indexed tokenAddress, uint256 indexed minimumCollateralizationRatio);
     event RemovedTokenSet(IERC20 indexed tokenAddress);
-    event ERC20Deposit(address indexed depositer, IERC20 indexed tokensDeposited, uint256 indexed amountDeposited);
+    event ERC20Deposit(
+        address indexed depositer, IERC20 indexed depositedTokenAddress, uint256 indexed amountDeposited
+    );
     event EthDeposit(address indexed depositer, uint256 indexed amount);
     event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed totalUserEthDebt);
     event Withdraw(address indexed user, IERC20 indexed tokenWithdrawn, uint256 indexed amountWithdrawn);
