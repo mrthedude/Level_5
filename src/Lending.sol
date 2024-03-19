@@ -41,8 +41,9 @@ error notEligibleAsCollateral();
 error inputMustBeGreaterThanZero();
 error notAuthorizedToCallThisFunction();
 error cannotRemoveFromCollateralListWithOpenDebtPositions();
-error cannotRepayMoreThanBorrowedAmount();
+error cannotRepayMoreThanborrowedEthAmount();
 error transferFailed();
+error notEnoughEthInContract();
 
 /**
  * @title lending
@@ -68,7 +69,9 @@ contract lending {
     /// @notice Tracks the deposit balance of the tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
     /// @notice Tracks the amount of ETH a user has borrowed from the contract
-    mapping(address borrower => uint256 amount) public borrowedAmount;
+    mapping(address borrower => uint256 amount) public borrowedEthAmount;
+    /// @notice Tracks a borrower's fee that must be paid to the contract in order to withdraw the deposited collateral
+    mapping(address borrower => uint256 totalBorrowFee) public borrowFee;
     /// @notice Tracks the amount of ETH a user has lent to the contract
     mapping(address lender => uint256 ethAmount) public lentEthAmount;
     /// @notice Tracks users' health factors
@@ -208,37 +211,45 @@ contract lending {
         emit ERC20Deposit(msg.sender, tokenAddress, amount);
     }
 
-    function withdraw(uint256 amount) external moreThanZero(amount) {}
+    function withdraw(uint256 amount) external moreThanZero(amount) {
+        if (borrowedEthAmount[msg.sender] > 0) {
+            revert cannotRemoveFromCollateralListWithOpenDebtPositions();
+        }
+    }
 
-    function borrow() external {}
+    function borrow(uint256 ethBorrowAmount) external moreThanZero(ethBorrowAmount) {
+        if (address(this).balance < ethBorrowAmount) {
+            revert notEnoughEthInContract();
+        }
+    }
 
     /**
      * @notice Allows users to repay the Eth they borrowed from the lending contract
      * @param amount The amount of Eth the user is repaying
      * @dev The repay amount must be greater than zero
-     * @dev The user's borrowedAmount[] adjusts accordingly to the amount repaid, then the Repay event is emitted
+     * @dev The user's borrowedEthAmount[] adjusts accordingly to the amount repaid, then the Repay event is emitted
      */
     function repay(uint256 amount) external moreThanZero(amount) {
-        if (borrowedAmount[msg.sender] < amount) {
-            revert cannotRepayMoreThanBorrowedAmount();
+        if (borrowedEthAmount[msg.sender] < amount) {
+            revert cannotRepayMoreThanborrowedEthAmount();
         }
         (bool success,) = address(this).call{value: amount}("");
         if (!success) {
             revert transferFailed();
         }
-        borrowedAmount[msg.sender] -= amount;
-        emit Repay(msg.sender, amount, getUserHealthFactor(msg.sender));
+        borrowedEthAmount[msg.sender] -= amount;
+        // emit Repay(msg.sender, amount, getUserHealthFactor(msg.sender));
     }
 
     function liquidate() external {}
 
-    function getUserHealthFactor(address user)
+    function getUserHealthFactorByToken(address user, IERC20 tokenAddress)
         public
         view
-        moreThanZero(borrowedAmount[user])
+        moreThanZero(borrowedEthAmount[user])
         returns (uint256 healthFactor)
     {
-        // uint256 ethCollateralInUsd = priceConverter.getEthConversionRate(collateralDepositBalance[user], i_priceFeed);
-        // healthFactor = ethCollateralInUsd * 1e18 / borrowerBalance[user] * 100;
+        uint256 borrowedEthAmountInUSD = priceConverter.getEthConversionRate(borrowedEthAmount[user], i_priceFeed);
+        healthFactor = depositIndexByToken[user][tokenAddress] * 1e18 / borrowedEthAmountInUSD * 100;
     }
 }
