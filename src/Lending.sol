@@ -221,7 +221,7 @@ contract lending {
         emit ERC20Deposit(msg.sender, tokenAddress, amount);
     }
 
-    function withdraw(uint256 amount, IERC20 tokenAddress) external moreThanZero(amount) {
+    function withdraw(uint256 amount, IERC20 tokenAddress) external moreThanZero(amount) isAllowedToken(tokenAddress) {
         uint256 totalUserEthDebt = borrowedEthAmount[msg.sender] + totalBorrowFee[msg.sender];
         if (totalUserEthDebt > 0) {
             revert cannotRemoveFromCollateralListWithOpenDebtPositions();
