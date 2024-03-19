@@ -76,13 +76,13 @@ contract lending {
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
     /// @notice Tracks the amount of ETH a user has borrowed from the contract
     mapping(address borrower => uint256 amount) public borrowedEthAmount;
-    /// @notice Tracks a borrower's fee that must be paid to the contract in order to withdraw the deposited collateral
+    /// @notice Tracks a user's total borrowing fee which must be paid to the contract in order to withdraw the deposited collateral
     mapping(address borrower => uint256 totalBorrowFee) public totalBorrowFee;
     /// @notice Tracks the amount of ETH a user has lent to the contract
     mapping(address lender => uint256 ethAmount) public lentEthAmount;
     /// @notice Tracks users' health factors
     mapping(address borrower => uint256 healthFactor) public userHealthFactor;
-    /// @notice Tracks the minimum collateralization ratio that an approved ERC20 token can borrow up to
+    /// @notice Tracks the minimum collateralization ratio for an approved ERC20 token
     mapping(IERC20 token => uint256 collateralFactor) public minimumCollateralizationRatio;
 
     //////////////////
