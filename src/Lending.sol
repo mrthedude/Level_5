@@ -41,9 +41,13 @@ error notEligibleAsCollateral();
 error inputMustBeGreaterThanZero();
 error notAuthorizedToCallThisFunction();
 error cannotRemoveFromCollateralListWithOpenDebtPositions();
-error cannotRepayMoreThanborrowedEthAmount();
+error cannotRepayMoreThanOpenDebtAndBorrowingFee();
 error transferFailed();
 error notEnoughEthInContract();
+error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
+error cannotWithdrawMoreCollateralThanWhatWasDeposited();
+error userIsNotEligibleForLiquidation();
+error entireDebtPositionMustBePaidToBeAbleToLiquidate();
 
 /**
  * @title lending
@@ -71,7 +75,7 @@ contract lending {
     /// @notice Tracks the amount of ETH a user has borrowed from the contract
     mapping(address borrower => uint256 amount) public borrowedEthAmount;
     /// @notice Tracks a borrower's fee that must be paid to the contract in order to withdraw the deposited collateral
-    mapping(address borrower => uint256 totalBorrowFee) public borrowFee;
+    mapping(address borrower => uint256 totalBorrowFee) public totalBorrowFee;
     /// @notice Tracks the amount of ETH a user has lent to the contract
     mapping(address lender => uint256 ethAmount) public lentEthAmount;
     /// @notice Tracks users' health factors
@@ -88,8 +92,10 @@ contract lending {
     event EthDeposit(address indexed depositer, uint256 indexed amount);
     event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed totalUserEthDebt);
     event Withdraw(address indexed user, IERC20 indexed tokenWithdrawn, uint256 indexed amountWithdrawn);
-    event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed userHealthFactor);
-    event Liquidate();
+    event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed totalUserEthDebt);
+    event Liquidate(
+        address indexed debtor, IERC20 indexed tokenCollateralAddress, uint256 indexed tokenAmountLiquidated
+    );
 
     ////////////////////
     //// Modifiers ////
@@ -211,16 +217,39 @@ contract lending {
         emit ERC20Deposit(msg.sender, tokenAddress, amount);
     }
 
-    function withdraw(uint256 amount) external moreThanZero(amount) {
-        if (borrowedEthAmount[msg.sender] > 0) {
+    function withdraw(uint256 amount, IERC20 tokenAddress) external moreThanZero(amount) {
+        uint256 totalUserEthDebt = borrowedEthAmount[msg.sender] + totalBorrowFee[msg.sender];
+        if (totalUserEthDebt > 0) {
             revert cannotRemoveFromCollateralListWithOpenDebtPositions();
         }
+        if (depositIndexByToken[msg.sender][tokenAddress] < amount) {
+            revert cannotWithdrawMoreCollateralThanWhatWasDeposited();
+        }
+        depositIndexByToken[msg.sender][tokenAddress] -= amount;
+        tokenAddress.safeTransferFrom(address(this), msg.sender, amount);
+        emit Withdraw(msg.sender, tokenAddress, amount);
     }
 
-    function borrow(uint256 ethBorrowAmount) external moreThanZero(ethBorrowAmount) {
+    function borrow(uint256 ethBorrowAmount, IERC20 tokenCollateral) external moreThanZero(ethBorrowAmount) {
         if (address(this).balance < ethBorrowAmount) {
             revert notEnoughEthInContract();
         }
+        if (
+            depositIndexByToken[msg.sender][tokenCollateral] * 1e18 / (ethBorrowAmount + borrowedEthAmount[msg.sender])
+                * 100 < minimumCollateralizationRatio[tokenCollateral]
+        ) {
+            revert notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
+        }
+
+        borrowedEthAmount[msg.sender] += ethBorrowAmount;
+        totalBorrowFee[msg.sender] += ethBorrowAmount * BORROW_FEE;
+
+        (bool success,) = msg.sender.call{value: ethBorrowAmount}("");
+        if (!success) {
+            revert transferFailed();
+        }
+
+        emit Borrow(msg.sender, ethBorrowAmount, borrowedEthAmount[msg.sender]);
     }
 
     /**
@@ -230,18 +259,44 @@ contract lending {
      * @dev The user's borrowedEthAmount[] adjusts accordingly to the amount repaid, then the Repay event is emitted
      */
     function repay(uint256 amount) external moreThanZero(amount) {
-        if (borrowedEthAmount[msg.sender] < amount) {
-            revert cannotRepayMoreThanborrowedEthAmount();
+        uint256 totalUserDebt = borrowedEthAmount[msg.sender] + totalBorrowFee[msg.sender];
+        if (totalUserDebt < amount) {
+            revert cannotRepayMoreThanOpenDebtAndBorrowingFee();
         }
+        if (amount >= totalBorrowFee[msg.sender]) {
+            uint256 interestExpense = totalBorrowFee[msg.sender];
+            totalBorrowFee[msg.sender] = 0;
+            amount -= interestExpense;
+        }
+
         (bool success,) = address(this).call{value: amount}("");
         if (!success) {
             revert transferFailed();
         }
         borrowedEthAmount[msg.sender] -= amount;
-        // emit Repay(msg.sender, amount, getUserHealthFactor(msg.sender));
+        emit Repay(msg.sender, amount, totalUserDebt);
     }
 
-    function liquidate() external {}
+    function liquidate(address debtor, IERC20 tokenAddress) external payable {
+        uint256 totalUserDebt = borrowedEthAmount[debtor] + totalBorrowFee[debtor];
+        if (getUserHealthFactorByToken(debtor, tokenAddress) > minimumCollateralizationRatio[tokenAddress]) {
+            revert userIsNotEligibleForLiquidation();
+        }
+        if (msg.value != totalUserDebt) {
+            revert entireDebtPositionMustBePaidToBeAbleToLiquidate();
+        }
+
+        (bool success,) = address(this).call{value: totalUserDebt}("");
+        if (!success) {
+            revert transferFailed();
+        }
+        uint256 collateralAmount = depositIndexByToken[debtor][tokenAddress];
+        depositIndexByToken[debtor][tokenAddress] = 0;
+        borrowedEthAmount[debtor] = 0;
+        totalBorrowFee[debtor] = 0;
+        tokenAddress.safeTransferFrom(address(this), msg.sender, collateralAmount);
+        emit Liquidate(debtor, tokenAddress, collateralAmount);
+    }
 
     function getUserHealthFactorByToken(address user, IERC20 tokenAddress)
         public
@@ -249,7 +304,8 @@ contract lending {
         moreThanZero(borrowedEthAmount[user])
         returns (uint256 healthFactor)
     {
-        uint256 borrowedEthAmountInUSD = priceConverter.getEthConversionRate(borrowedEthAmount[user], i_priceFeed);
-        healthFactor = depositIndexByToken[user][tokenAddress] * 1e18 / borrowedEthAmountInUSD * 100;
+        uint256 totalEthDebtInUSD =
+            priceConverter.getEthConversionRate((borrowedEthAmount[user] + totalBorrowFee[user]), i_priceFeed);
+        healthFactor = depositIndexByToken[user][tokenAddress] * 1e18 / totalEthDebtInUSD * 100;
     }
 }
