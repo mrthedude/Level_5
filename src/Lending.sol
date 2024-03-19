@@ -53,7 +53,9 @@ error entireDebtPositionMustBePaidToBeAbleToLiquidate();
  * @title lending
  * @author mrthedude
  * @notice This is a lending and borrowing contract where lent ETH may be borrowed against approved ERC20 tokens
- * @dev Uses a Chainlink ETH/USD pricefeed oracle to update LTVs on outstanding borrowing positions. This contract incorporates a fixed borrowing fee and considers the value of each ERC20 collateral to be $1 per token for simplicity
+ * @dev Uses a Chainlink ETH/USD pricefeed oracle to update LTVs on outstanding borrowing positions
+ * @dev This contract incorporates a fixed borrowing fee and considers the value of each ERC20 collateral to be $1 per token for simplicity
+ * @dev Lenders do not receive any of the borrowing fees due to author's lack of smart contraact knowledge
  */
 contract lending {
     using SafeERC20 for IERC20;
