@@ -56,15 +56,24 @@ contract lending {
     //// State Variables ////
     /////////////////////////
 
+    /// @notice Address with special function privileges
     address public immutable i_owner;
+    /// @dev Chainlink ETH/USD price feed
     AggregatorV3Interface private immutable i_priceFeed;
+    /// @notice Fixed borrow fee to be paid in ETH before the deposited collateral can be withdrawn
     uint256 public constant BORROW_FEE = 5e17; // 5% borrowing fee
+    /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral
     IERC20[] public allowedTokens;
 
+    /// @notice Tracks the deposit balance of the tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
+    /// @notice Tracks the amount of ETH a user has borrowed from the contract
     mapping(address borrower => uint256 amount) public borrowedAmount;
+    /// @notice Tracks the amount of ETH a user has lent to the contract
     mapping(address lender => uint256 ethAmount) public lentEthAmount;
+    /// @notice Tracks users' health factors
     mapping(address borrower => uint256 healthFactor) public userHealthFactor;
+    /// @notice Tracks the minimum collateralization ratio that an approved ERC20 token can borrow up to
     mapping(IERC20 token => uint256 collateralFactor) public minimumCollateralizationRatio;
 
     //////////////////
@@ -74,8 +83,8 @@ contract lending {
     event RemovedTokenSet(IERC20 indexed tokenAddress);
     event ERC20Deposit(address indexed depositer, IERC20 indexed tokensDeposited, uint256 indexed amountDeposited);
     event EthDeposit(address indexed depositer, uint256 indexed amount);
-    event Borrow();
-    event Withdraw();
+    event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed totalUserEthDebt);
+    event Withdraw(address indexed user, IERC20 indexed tokenWithdrawn, uint256 indexed amountWithdrawn);
     event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed userHealthFactor);
     event Liquidate();
 
@@ -131,6 +140,7 @@ contract lending {
     /**
      * @notice The constructor function sets the i_owner of the lending contract upon deployment
      * @param _owner Sets address that will have with special function call privileges
+     * @param priceFeed Sets the ETH/USD price feed that will be used to determine the LTV of open debt positions
      */
     constructor(address _owner, address priceFeed) {
         i_owner = _owner;
@@ -176,13 +186,13 @@ contract lending {
         if (tokenAddress.balanceOf(address(this)) != 0) {
             revert cannotRemoveFromCollateralListWithOpenDebtPositions();
         }
-        IERC20[] memory newArray;
+        IERC20[] memory newTokenAllowList;
         for (uint256 i = 0; i < allowedTokens.length; i++) {
             if (allowedTokens[i] != tokenAddress) {
-                newArray[i] = allowedTokens[i];
+                newTokenAllowList[i] = allowedTokens[i];
             }
         }
-        allowedTokens = newArray;
+        allowedTokens = newTokenAllowList;
         emit RemovedTokenSet(tokenAddress);
     }
 
@@ -222,5 +232,13 @@ contract lending {
 
     function liquidate() external {}
 
-    function getUserHealthFactor(address user) public view returns (uint256 healthFactor) {}
+    function getUserHealthFactor(address user)
+        public
+        view
+        moreThanZero(borrowedAmount[user])
+        returns (uint256 healthFactor)
+    {
+        // uint256 ethCollateralInUsd = priceConverter.getEthConversionRate(collateralDepositBalance[user], i_priceFeed);
+        // healthFactor = ethCollateralInUsd * 1e18 / borrowerBalance[user] * 100;
+    }
 }
