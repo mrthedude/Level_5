@@ -54,6 +54,7 @@ contract lending {
     /////////////////////////
 
     address public immutable i_owner;
+    uint256 public constant BORROW_FEE = 5e17; // 5% borrowing fee
     IERC20[] public allowedTokens;
 
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
