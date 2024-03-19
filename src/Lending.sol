@@ -95,7 +95,7 @@ contract lending {
     );
     event EthDeposit(address indexed depositer, uint256 indexed amount);
     event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed totalUserEthDebt);
-    event Withdraw(address indexed user, IERC20 indexed tokenWithdrawn, uint256 indexed amountWithdrawn);
+    event Withdraw(address indexed user, IERC20 indexed withdrawnTokenAddress, uint256 indexed amountWithdrawn);
     event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed totalUserEthDebt);
     event Liquidate(
         address indexed debtor, IERC20 indexed tokenCollateralAddress, uint256 indexed tokenAmountLiquidated
