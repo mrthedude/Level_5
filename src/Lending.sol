@@ -30,6 +30,8 @@ pragma solidity ^0.8.19;
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {priceConverter} from "./priceConverter.sol";
+import {AggregatorV3Interface} from
+    "lib/chainlink-brownie-contracts/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /////////////////
 //// Errors ////
@@ -55,6 +57,7 @@ contract lending {
     /////////////////////////
 
     address public immutable i_owner;
+    AggregatorV3Interface private immutable i_priceFeed;
     uint256 public constant BORROW_FEE = 5e17; // 5% borrowing fee
     IERC20[] public allowedTokens;
 
@@ -129,8 +132,9 @@ contract lending {
      * @notice The constructor function sets the i_owner of the lending contract upon deployment
      * @param _owner Sets address that will have with special function call privileges
      */
-    constructor(address _owner) {
+    constructor(address _owner, address priceFeed) {
         i_owner = _owner;
+        i_priceFeed = AggregatorV3Interface(priceFeed);
     }
 
     /**
