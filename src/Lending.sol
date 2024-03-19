@@ -234,7 +234,11 @@ contract lending {
         emit Withdraw(msg.sender, tokenAddress, amount);
     }
 
-    function borrow(uint256 ethBorrowAmount, IERC20 tokenCollateral) external moreThanZero(ethBorrowAmount) {
+    function borrow(uint256 ethBorrowAmount, IERC20 tokenCollateral)
+        external
+        moreThanZero(ethBorrowAmount)
+        isAllowedToken(tokenCollateral)
+    {
         if (address(this).balance < ethBorrowAmount) {
             revert notEnoughEthInContract();
         }
