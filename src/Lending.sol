@@ -41,6 +41,12 @@ error cannotRemoveFromCollateralListWithOpenDebtPositions();
 error cannotRepayMoreThanBorrowedAmount();
 error transferFailed();
 
+/**
+ * @title lending
+ * @author mrthedude
+ * @notice This is a lending and borrowing contract where lent ETH may be borrowed against approved ERC20 tokens
+ * @dev Uses a Chainlink ETH/USD pricefeed oracle to update LTVs on outstanding borrowing positions. This contract incorporates a fixed borrowing fee and considers the value of each ERC20 collateral to be $1 per token for simplicity
+ */
 contract lending {
     using SafeERC20 for IERC20;
     //////////////////////////
