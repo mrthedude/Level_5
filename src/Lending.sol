@@ -108,7 +108,7 @@ contract lending {
     /**
      * @notice Modifier to restrict which ERC20 tokens are eligible to be used as collateral for borrowing Eth
      * @param tokenAddress The address of the ERC20 token being checked for eligibility
-     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay() liquidate()
+     * @dev Used in the following functions: deposit(), withdraw(), borrow(), liquidate()
      */
     modifier isAllowedToken(IERC20 tokenAddress) {
         bool included = false;
@@ -285,7 +285,7 @@ contract lending {
         emit Repay(msg.sender, amount, totalUserDebt);
     }
 
-    function liquidate(address debtor, IERC20 tokenAddress) external payable {
+    function liquidate(address debtor, IERC20 tokenAddress) external payable isAllowedToken(tokenAddress) {
         uint256 totalUserDebt = borrowedEthAmount[debtor] + totalBorrowFee[debtor];
         if (getUserHealthFactorByToken(debtor, tokenAddress) > minimumCollateralizationRatio[tokenAddress]) {
             revert userIsNotEligibleForLiquidation();
