@@ -49,7 +49,7 @@ error cannotWithdrawMoreCollateralThanWhatWasDeposited();
 error userIsNotEligibleForLiquidation();
 error entireDebtPositionMustBePaidToBeAbleToLiquidate();
 error cannotCalculateHealthFactor();
-error withdrawlRequestExceedsLentAmount();
+error withdrawlRequestExceedsPayoutAmount();
 
 /**
  * @title lending
@@ -370,9 +370,18 @@ contract lending {
      * @dev updates the user's lentEthAmount mapping
      * @dev Emits the EthWithdrawl event
      */
+    /**
+     * User wants to withdraw more lent ETH than their lending yield
+     * 1. The total lending yield pot must be reduced by the amount of yield the user has accrued
+     * 2. The yield amount must be sent to the user
+     * 3. The yield amount must be subtracted from the amountOfEth requested for withdrawl
+     * 4. The updated amountOfEth must be sent to the user
+     * 5. The lentEthAmount must subtracted by the amountOfEth
+     *
+     */
     function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) {
-        if (amountOfEth < lentEthAmount[msg.sender]) {
-            revert withdrawlRequestExceedsLentAmount();
+        if (amountOfEth > lentEthAmount[msg.sender]) {
+            revert withdrawlRequestExceedsPayoutAmount();
         }
         if (amountOfEth > address(this).balance) {
             revert notEnoughEthInContract();
@@ -383,6 +392,40 @@ contract lending {
             revert transferFailed();
         }
         emit EthWithdrawl(msg.sender, amountOfEth);
+    }
+
+    /**
+     * @notice Allows lenders to withdraw their lending yield, based off of borrowing activity and the lender's percentage of the contract's ETH balance
+     * @dev Entire yield amount is withdraw for the lender, smaller amounts cannot be specified
+     * @dev Updates the lendersInterestPaymentPot
+     * @dev Emits the EthWithdrawl event
+     */
+    function withdrawEthYield() external {
+        uint256 ethYield = getLenderPayoutAmount(msg.sender) - lentEthAmount[msg.sender];
+        if (ethYield > address(this).balance) {
+            revert notEnoughEthInContract();
+        }
+
+        lendersInterestPaymentPot -= ethYield;
+
+        (bool success,) = msg.sender.call{value: ethYield}("");
+        if (!success) {
+            revert transferFailed();
+        }
+        emit EthWithdrawl(msg.sender, ethYield);
+    }
+
+    function withdrawEntireLendingPosition() external {
+        if (lentEthAmount[msg.sender] > address(this).balance) {
+            revert notEnoughEthInContract();
+        }
+        uint256 lendingPosition = lentEthAmount[msg.sender];
+        lentEthAmount[msg.sender] = 0;
+        (bool success,) = msg.sender.call{value: lendingPosition}("");
+        if (!success) {
+            revert transferFailed();
+        }
+        emit EthWithdrawl(msg.sender, lendingPosition);
     }
 
     /**
