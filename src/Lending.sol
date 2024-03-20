@@ -49,6 +49,7 @@ error cannotWithdrawMoreCollateralThanWhatWasDeposited();
 error userIsNotEligibleForLiquidation();
 error entireDebtPositionMustBePaidToBeAbleToLiquidate();
 error cannotCalculateHealthFactor();
+error withdrawlRequestExceedsLentAmount();
 
 /**
  * @title lending
@@ -95,6 +96,7 @@ contract lending {
         address indexed depositer, IERC20 indexed depositedTokenAddress, uint256 indexed amountDeposited
     );
     event EthDeposit(address indexed depositer, uint256 indexed amount);
+    event EthWithdrawl(address indexed user, uint256 indexed amount);
     event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed totalUserEthDebt);
     event Withdraw(address indexed user, IERC20 indexed withdrawnTokenAddress, uint256 indexed amountWithdrawn);
     event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed totalUserEthDebt);
@@ -352,6 +354,30 @@ contract lending {
         totalBorrowFee[debtor] = 0;
         tokenAddress.safeTransferFrom(address(this), msg.sender, collateralAmount);
         emit Liquidate(debtor, tokenAddress, collateralAmount);
+    }
+
+    /**
+     * @notice Allows users to withdraw their lent ETH
+     * @param amountOfEth The amount of ETH the user is withdrawing
+     * @dev The withdrawl request must be greater than zero
+     * @dev Reverts with the withdrawlRequestExceedsLentAmount error if the amountOfEth is greater than the amount of ETH the user deposited into the contract
+     * @dev Reverts with the notEnoughEthInContract error if the amountOfEth is greater than the current amount of ETH stored in the contract
+     * @dev updates the user's lentEthAmount mapping
+     * @dev Emits the EthWithdrawl event
+     */
+    function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) {
+        if (amountOfEth < lentEthAmount[msg.sender]) {
+            revert withdrawlRequestExceedsLentAmount();
+        }
+        if (amountOfEth > address(this).balance) {
+            revert notEnoughEthInContract();
+        }
+        lentEthAmount[msg.sender] -= amountOfEth;
+        (bool success,) = msg.sender.call{value: amountOfEth}("");
+        if (!success) {
+            revert transferFailed();
+        }
+        emit EthWithdrawl(msg.sender, amountOfEth);
     }
 
     /**
