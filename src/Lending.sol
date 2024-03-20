@@ -73,6 +73,9 @@ contract lending {
     uint256 public constant BORROW_FEE = 5e17; // 5% borrowing fee
     /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral
     IERC20[] public allowedTokens;
+    /// @notice The total amount of interest that lenders can claim on a pro-rata basis. Updated with every borrow() function call
+    /// @notice Used in conjuction with the getLenderPayoutAmount() function to calculate a specific lender's payout
+    uint256 public lendersInterestPaymentPot;
 
     /// @notice Tracks the deposit balance of the tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
@@ -129,7 +132,7 @@ contract lending {
     /**
      * @notice Modifier to ensure the function call parameter is more than zero
      * @param amount The input amount being checked in the function call
-     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), liquidate(), withdrawLentEth()
+     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), liquidate(), withdrawLentEth(), getLenderPayoutAmount()
      */
     modifier moreThanZero(uint256 amount) {
         if (amount <= 0) {
@@ -262,6 +265,7 @@ contract lending {
      * @dev Reverts with the notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth error if the borrow request will cause the user's health factor to fall below the minimum collateralization ratio for that ERC20 token collateral market
      * @dev Updates the user's ethBorrowAmount mapping
      * @dev Updates the user's totalBorrowFee mapping
+     * @dev Updates the lendersInterestPaymentPot to allow ETH lenders to claim a yield on their lent ETH
      * @dev Emits the Borrow event
      */
     function borrow(uint256 ethBorrowAmount, IERC20 tokenCollateral)
@@ -281,6 +285,7 @@ contract lending {
 
         borrowedEthAmount[msg.sender] += ethBorrowAmount;
         totalBorrowFee[msg.sender] += ethBorrowAmount * BORROW_FEE;
+        lendersInterestPaymentPot += totalBorrowFee[msg.sender];
 
         (bool success,) = msg.sender.call{value: ethBorrowAmount}("");
         if (!success) {
@@ -393,5 +398,24 @@ contract lending {
         uint256 totalEthDebtInUSD =
             priceConverter.getEthConversionRate((borrowedEthAmount[user] + totalBorrowFee[user]), i_priceFeed);
         healthFactor = depositIndexByToken[user][tokenAddress] * 1e18 / totalEthDebtInUSD * 100;
+    }
+
+    /**
+     * @notice Calculates the amount of ETH yield a lender is entitled to based on borrowing activity and the lender's share of the total ETH pool less borrowing fees
+     * @param lender The address of the ETH lender whose lending payout is being calculated
+     * @dev Reverts with the inputMustBeGreaterThanZero error if there is no ETH in the contract
+     */
+    function getLenderPayoutAmount(address lender)
+        internal
+        view
+        moreThanZero(address(this).balance)
+        returns (uint256 lenderPayout)
+    {
+        uint256 totalContractEth = address(this).balance;
+        uint256 contractEthLessBorrowingFee = totalContractEth - lendersInterestPaymentPot;
+        uint256 amountOfEthFromLender = lentEthAmount[lender];
+        uint256 lenderPercentageOfEthPool = amountOfEthFromLender / contractEthLessBorrowingFee;
+        uint256 lenderProRataShareOfBorrowingFees = lenderPercentageOfEthPool * lendersInterestPaymentPot;
+        lenderPayout = amountOfEthFromLender + lenderProRataShareOfBorrowingFees;
     }
 }
