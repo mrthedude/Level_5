@@ -163,7 +163,7 @@ contract lending {
 
     /**
      * @notice Allows the lending contract to receive deposits of Ether
-     * @dev Records who deposited and how much was deposited in the lentEthAmount mapping
+     * @dev Updates the msg.sender's lentEthAmount
      * @dev Emits the EthDeposit event
      */
     receive() external payable {
