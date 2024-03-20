@@ -129,7 +129,7 @@ contract lending {
     /**
      * @notice Modifier to ensure the function call parameter is more than zero
      * @param amount The input amount being checked in the function call
-     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), liquidate()
+     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), liquidate(), withdrawLentEth()
      */
     modifier moreThanZero(uint256 amount) {
         if (amount <= 0) {
