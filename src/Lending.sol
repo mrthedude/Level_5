@@ -6,7 +6,6 @@
  * imports
  * interfaces, libraries, contracts
  * errors
- * Type declarations
  * State variables
  * Events
  * Modifiers
@@ -33,62 +32,67 @@ import {priceConverter} from "./priceConverter.sol";
 import {AggregatorV3Interface} from
     "lib/chainlink-brownie-contracts/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-/////////////////
-//// Errors ////
-////////////////
-error unrecognizedFunctionCall();
-error notEligibleAsCollateral();
-error inputMustBeGreaterThanZero();
-error notAuthorizedToCallThisFunction();
-error cannotRemoveFromCollateralListWithOpenDebtPositions();
-error cannotRepayMoreThanOpenDebtAndBorrowingFee();
-error transferFailed();
-error notEnoughEthInContract();
-error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
-error cannotWithdrawMoreCollateralThanWhatWasDeposited();
-error userIsNotEligibleForLiquidation();
-error entireDebtPositionMustBePaidToBeAbleToLiquidate();
-error cannotCalculateHealthFactor();
-error withdrawlRequestExceedsPayoutAmount();
+/////////////////////
+//// Libraries ////
+////////////////////
+using SafeERC20 for IERC20;
 
+////////////////////
+//// Contracts ////
+///////////////////
 /**
  * @title lending
  * @author mrthedude
- * @notice This is a lending and borrowing contract where lent ETH may be borrowed against approved ERC20 tokens
+ * @notice This is a lending and borrowing contract where users can lend ETH to earn yield from other users who borrow this ETH against approved ERC20 token collateral
  * @dev Uses a Chainlink ETH/USD pricefeed oracle to update LTVs on outstanding borrowing positions
- * @dev This contract incorporates a fixed borrowing fee and considers the value of each ERC20 collateral to be $1 per token for simplicity
- * @dev Lenders do not receive any of the borrowing fees due to author's lack of smart contraact knowledge
+ * @dev Incorporates a fixed borrowing fee of 5% the amount of ETH borrowed and considers the value of each ERC20 token collateral to be $1 per token for simplicity
  */
 contract lending {
-    using SafeERC20 for IERC20;
+    /////////////////
+    //// Errors ////
+    ////////////////
+    error unrecognizedFunctionCall();
+    error notEligibleAsCollateral();
+    error inputMustBeGreaterThanZero();
+    error notAuthorizedToCallThisFunction();
+    error cannotRemoveFromCollateralListWithOpenDebtPositions();
+    error cannotRepayMoreThanOpenDebtAndBorrowingFee();
+    error transferFailed();
+    error notEnoughEthInContract();
+    error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
+    error cannotWithdrawMoreCollateralThanWhatWasDeposited();
+    error userIsNotEligibleForLiquidation();
+    error entireDebtPositionMustBePaidToBeAbleToLiquidate();
+    error cannotCalculateHealthFactor();
+    error withdrawlRequestExceedsPayoutAmount();
+
     //////////////////////////
     //// State Variables ////
     /////////////////////////
-
     /// @notice Address with special function privileges
     address public immutable i_owner;
     /// @dev Chainlink ETH/USD price feed
     AggregatorV3Interface private immutable i_priceFeed;
-    /// @notice Fixed borrow fee to be paid in ETH before the deposited collateral can be withdrawn
-    uint256 public constant BORROW_FEE = 5e17; // 5% borrowing fee
-    /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral
+    /// @notice Fixed borrow fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
+    uint256 public constant BORROW_FEE = 5e16; // 5% fee on the amount of ETH borrowed per function call
+    /// @notice Accounts for the total amount of fees that lenders can claim on a pro-rata basis. Updated with every borrow() function call
+    uint256 public lendersYieldPool;
+    /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
     IERC20[] public allowedTokens;
-    /// @notice The total amount of interest that lenders can claim on a pro-rata basis. Updated with every borrow() function call
-    /// @notice Used in conjuction with the getLenderPayoutAmount() function to calculate a specific lender's payout
-    uint256 public lendersInterestPaymentPot;
 
-    /// @notice Tracks the deposit balance of the tokens a user has supplied to the contract as borrowing collateral
+    /// @notice Tracks the deposit balance of the ERC20 tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
     /// @notice Tracks the amount of ETH a user has borrowed from the contract
     mapping(address borrower => uint256 amount) public borrowedEthAmount;
-    /// @notice Tracks a user's total borrowing fee which must be paid to the contract in order to withdraw the deposited collateral
-    mapping(address borrower => uint256 totalBorrowFee) public totalBorrowFee;
+    /// @notice Tracks a user's total borrowing fees which must be paid to the contract in order to withdraw the deposited collateral
+    mapping(address borrower => uint256 userBorrowingFees) public userBorrowingFees;
     /// @notice Tracks the amount of ETH a user has lent to the contract
     mapping(address lender => uint256 ethAmount) public lentEthAmount;
+    /// @notice Tracks the minimum collateralization ratio for approved ERC20 token collateral, below which the borrowing position is eligible for liquidation
+    mapping(IERC20 token => uint256 collateralFactor) public minimumCollateralizationRatio;
+
     /// @notice Tracks users' health factors
     mapping(address borrower => uint256 healthFactor) public userHealthFactor;
-    /// @notice Tracks the minimum collateralization ratio for an approved ERC20 token
-    mapping(IERC20 token => uint256 collateralFactor) public minimumCollateralizationRatio;
 
     //////////////////
     //// Events /////
@@ -112,8 +116,8 @@ contract lending {
     ///////////////////
 
     /**
-     * @notice Modifier to restrict which ERC20 tokens are eligible to be used as collateral for borrowing Eth
-     * @param tokenAddress The address of the ERC20 token being checked for eligibility
+     * @notice Modifier to restrict which ERC20 tokens are eligible to be used as collateral for borrowing lent ETH
+     * @param tokenAddress The address of the ERC20 token being checked for collateral eligibility
      * @dev Used in the following functions: deposit(), withdraw(), borrow(), liquidate()
      */
     modifier isAllowedToken(IERC20 tokenAddress) {
@@ -129,10 +133,12 @@ contract lending {
         _;
     }
 
+    ///////////////////////////// NEED TO EDIT NOTES FOR WHICH FUNCTIONS USE THIS MODIFIER /////////////////////////////
+
     /**
      * @notice Modifier to ensure the function call parameter is more than zero
      * @param amount The input amount being checked in the function call
-     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), liquidate(), withdrawLentEth(), getLenderPayoutAmount()
+     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), liquidate(), withdrawLentEth(), _getLenderInterestFees()
      */
     modifier moreThanZero(uint256 amount) {
         if (amount <= 0) {
@@ -143,7 +149,7 @@ contract lending {
 
     /**
      *
-     * @notice Modifier that restricts access to certain functions to only i_owner
+     * @notice Modifier that restricts access to certain functions to only the i_owner
      * @dev Used in the following functions: allowTokenAsCollateral(), removeTokenAsCollateral()
      */
     modifier onlyOwner() {
@@ -153,12 +159,18 @@ contract lending {
         _;
     }
 
+    //////////////////// TO DO: ADD FUNCTIONALITY TO ALLOW THE I_OWNER TO INHIBIT OPENING NEW BORROWING POSITIONS FOR CERTAIN MARKETS /////////////////////
+
+    modifier checkBorrowingMarket(IERC20 tokenAddress) {
+        _;
+    }
+
     ////////////////////
     //// Functions ////
     ///////////////////
     /**
      * @notice Sets the i_owner and i_priceFeed of the lending contract upon deployment
-     * @param _owner Sets the address that will have special prvileges for certain function calls
+     * @param _owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral() and removeTokenAsCollateral()
      * @param priceFeed Sets the ETH/USD price feed that will be used to determine the LTV of open debt positions
      */
     constructor(address _owner, address priceFeed) {
@@ -184,10 +196,10 @@ contract lending {
     }
 
     /**
-     * @notice Adds an ERC20 token to the list of eligible collateral that can be used to borrow deposited Eth against
-     * @notice Sets the tokens minimumCollateralizationRatio (borrowing limits) for the ERC20 token
+     * @notice Adds an ERC20 token to the list of eligible collateral that can be deposited to borrow lent ETH against
+     * @notice Sets the ERC20 token's minimumCollateralizationRatio (borrowing limits)
      * @param tokenAddress The ERC20 token that is being added to the eligible collateral list
-     * @param minimumCollateralRatio The minimum ratio allowed for collateral borrowing (Maximum borrowing limit)
+     * @param minimumCollateralRatio The minimum collateralization ratio allowed for open debt positions, falling below this makes the position eligible for liquidation
      * @dev Only the i_owner is able to call this function
      * @dev Adds tokenAddress to the allowedTokens[] array
      * @dev Adds the minimumCollateralRatio to the minimumCollaterizationRatio[] array
@@ -200,10 +212,10 @@ contract lending {
     }
 
     /**
-     * @notice Removes an ERC20 token from the list of eligible collateral that can be used to borrow deposited Eth against
+     * @notice Removes an ERC20 token from the list of eligible collateral that can be used to borrow lent ETH against
      * @param tokenAddress The ERC20 token that is being removed from the eligible collateral list
      * @dev Only the i_owner is able to call this function
-     * @dev Reverts with the cannotRemoveFromCollateralListWithOpenDebtPositions error if the collateral being removed has open debt positions in the lending contract
+     * @dev Reverts with the cannotRemoveFromCollateralListWithOpenDebtPositions error if the collateral being removed has open debt positions
      * @dev Emits the RemovedTokenSet event
      */
     function removeTokenAsCollateral(IERC20 tokenAddress) external onlyOwner {
@@ -243,7 +255,7 @@ contract lending {
      * @dev Emits the Withdraw event
      */
     function withdraw(uint256 amount, IERC20 tokenAddress) external moreThanZero(amount) isAllowedToken(tokenAddress) {
-        uint256 totalUserEthDebt = borrowedEthAmount[msg.sender] + totalBorrowFee[msg.sender];
+        uint256 totalUserEthDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender];
         if (totalUserEthDebt > 0) {
             revert cannotRemoveFromCollateralListWithOpenDebtPositions();
         }
@@ -257,15 +269,15 @@ contract lending {
 
     /**
      * @notice Allows users to borrow ETH held in the contract against approved collateral, up to a certain collateralization ratio (borrowing limit)
-     * @notice Every successful borrow() function call will incure a borrowing fee of 5% of the ETH borrowed during this function call, recorded in the totalBorrowFee mapping
+     * @notice Every successful borrow() function call will incure a borrowing fee of 5% of the ETH borrowed during this function call, recorded in the userBorrowingFees mapping
      * @param ethBorrowAmount The amount of ETH the user specifies to borrow
      * @param tokenCollateral The ERC20 token collateral that the ETH is being borrowed against
      * @dev Only approved, user-deposited ERC20 token collateral may be borrowed against, and the amount to borrow must be greater than zero
      * @dev Reverts with the notEnoughEthInContract error if the ethBorrowAmount exceeds the amount of ETH held in the contract
      * @dev Reverts with the notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth error if the borrow request will cause the user's health factor to fall below the minimum collateralization ratio for that ERC20 token collateral market
      * @dev Updates the user's ethBorrowAmount mapping
-     * @dev Updates the user's totalBorrowFee mapping
-     * @dev Updates the lendersInterestPaymentPot to allow ETH lenders to claim a yield on their lent ETH
+     * @dev Updates the user's userBorrowingFees mapping
+     * @dev Updates the lendersYieldPool to allow ETH lenders to claim a yield on their lent ETH
      * @dev Emits the Borrow event
      */
     function borrow(uint256 ethBorrowAmount, IERC20 tokenCollateral)
@@ -277,15 +289,17 @@ contract lending {
             revert notEnoughEthInContract();
         }
         if (
-            depositIndexByToken[msg.sender][tokenCollateral] * 1e18 / (ethBorrowAmount + borrowedEthAmount[msg.sender])
-                * 100 < minimumCollateralizationRatio[tokenCollateral]
+            depositIndexByToken[msg.sender][tokenCollateral] * 1e18
+                / (ethBorrowAmount + borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender]) * 100
+                < minimumCollateralizationRatio[tokenCollateral]
         ) {
             revert notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
         }
 
         borrowedEthAmount[msg.sender] += ethBorrowAmount;
-        totalBorrowFee[msg.sender] += ethBorrowAmount * BORROW_FEE;
-        lendersInterestPaymentPot += totalBorrowFee[msg.sender];
+        userBorrowingFees[msg.sender] += ethBorrowAmount * BORROW_FEE;
+        uint256 increaseToTheBorrowingPool = ethBorrowAmount * BORROW_FEE;
+        lendersYieldPool += increaseToTheBorrowingPool;
 
         (bool success,) = msg.sender.call{value: ethBorrowAmount}("");
         if (!success) {
@@ -295,28 +309,30 @@ contract lending {
         emit Borrow(msg.sender, ethBorrowAmount, borrowedEthAmount[msg.sender]);
     }
 
+    ///////////////// Need to review above code up to this point then continue ////////////////////////////////////
+
     /**
      * @notice Allows users to repay the ETH they borrowed from the lending contract
      * @param amount The amount of ETH the user is repaying
      * @dev Reverts with the cannotRepayMoreThanOpenDebtAndBorrowingFee error if the amount parameter is greater than the user's total debt (borrowing amount + borrowing fee)
      * @dev The repay amount must be greater than zero
-     * @dev If amount <= user's totalBorrowFee: User's totalBorrowFee -= amount && amount = 0
-     * @dev If amount >= user's totalBorrowFee: User's totalBorrowFee = 0 (paid off) && the remaining amount is subtracted from the user's borrowedEthAmount
+     * @dev If amount <= user's userBorrowingFees: User's userBorrowingFees -= amount && amount = 0
+     * @dev If amount >= user's userBorrowingFees: User's userBorrowingFees = 0 (paid off) && the remaining amount is subtracted from the user's borrowedEthAmount
      * @dev Updates the user's borrowedEthAmount mapping with any remaining amount
      * @dev Emits the Repay event
      */
     function repay(uint256 amount) external moreThanZero(amount) {
-        uint256 totalUserDebt = borrowedEthAmount[msg.sender] + totalBorrowFee[msg.sender];
+        uint256 totalUserDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender];
         if (totalUserDebt < amount) {
             revert cannotRepayMoreThanOpenDebtAndBorrowingFee();
         }
-        if (amount <= totalBorrowFee[msg.sender]) {
-            totalBorrowFee[msg.sender] -= amount;
+        if (amount <= userBorrowingFees[msg.sender]) {
+            userBorrowingFees[msg.sender] -= amount;
             amount = 0;
         }
-        if (amount >= totalBorrowFee[msg.sender]) {
-            uint256 interestExpense = totalBorrowFee[msg.sender];
-            totalBorrowFee[msg.sender] = 0;
+        if (amount >= userBorrowingFees[msg.sender]) {
+            uint256 interestExpense = userBorrowingFees[msg.sender];
+            userBorrowingFees[msg.sender] = 0;
             amount -= interestExpense;
         }
         borrowedEthAmount[msg.sender] -= amount;
@@ -336,12 +352,12 @@ contract lending {
      * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's loan is not below the minimum collateralization ratio
      * @dev Reverts with the entireDebtPositionMustBePaidToBeAbleToLiquidate error if the liquidator calls the function without sending the debtor's exact ETH debt with the function call
      * @dev Updates the debtor's depositIndexByToken to 0 for that collateral market
-     * @dev Updates the debtor's totalBorrowFee to 0
+     * @dev Updates the debtor's userBorrowingFees to 0
      * @dev Emits the Liquidate event
      *
      */
     function liquidate(address debtor, IERC20 tokenAddress) external payable isAllowedToken(tokenAddress) {
-        uint256 totalUserDebt = borrowedEthAmount[debtor] + totalBorrowFee[debtor];
+        uint256 totalUserDebt = borrowedEthAmount[debtor] + userBorrowingFees[debtor];
         if (getUserHealthFactorByToken(debtor, tokenAddress) > minimumCollateralizationRatio[tokenAddress]) {
             revert userIsNotEligibleForLiquidation();
         }
@@ -356,29 +372,13 @@ contract lending {
         uint256 collateralAmount = depositIndexByToken[debtor][tokenAddress];
         depositIndexByToken[debtor][tokenAddress] = 0;
         borrowedEthAmount[debtor] = 0;
-        totalBorrowFee[debtor] = 0;
+        userBorrowingFees[debtor] = 0;
         tokenAddress.safeTransferFrom(address(this), msg.sender, collateralAmount);
         emit Liquidate(debtor, tokenAddress, collateralAmount);
     }
 
-    /**
-     * @notice Allows users to withdraw their lent ETH
-     * @param amountOfEth The amount of ETH the user is withdrawing
-     * @dev The withdrawl request must be greater than zero
-     * @dev Reverts with the withdrawlRequestExceedsLentAmount error if the amountOfEth is greater than the amount of ETH the user deposited into the contract
-     * @dev Reverts with the notEnoughEthInContract error if the amountOfEth is greater than the current amount of ETH stored in the contract
-     * @dev updates the user's lentEthAmount mapping
-     * @dev Emits the EthWithdrawl event
-     */
-    /**
-     * User wants to withdraw more lent ETH than their lending yield
-     * 1. The total lending yield pot must be reduced by the amount of yield the user has accrued
-     * 2. The yield amount must be sent to the user
-     * 3. The yield amount must be subtracted from the amountOfEth requested for withdrawl
-     * 4. The updated amountOfEth must be sent to the user
-     * 5. The lentEthAmount must subtracted by the amountOfEth
-     *
-     */
+    ///////////////// WITHDRAWL PROCESS --> LENT ETH AND ITS YIELD /////////////////
+
     function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) {
         if (amountOfEth > lentEthAmount[msg.sender]) {
             revert withdrawlRequestExceedsPayoutAmount();
@@ -394,39 +394,11 @@ contract lending {
         emit EthWithdrawl(msg.sender, amountOfEth);
     }
 
-    /**
-     * @notice Allows lenders to withdraw their lending yield, based off of borrowing activity and the lender's percentage of the contract's ETH balance
-     * @dev Entire yield amount is withdraw for the lender, smaller amounts cannot be specified
-     * @dev Updates the lendersInterestPaymentPot
-     * @dev Emits the EthWithdrawl event
-     */
-    function withdrawEthYield() external {
-        uint256 ethYield = getLenderPayoutAmount(msg.sender) - lentEthAmount[msg.sender];
-        if (ethYield > address(this).balance) {
-            revert notEnoughEthInContract();
-        }
+    function _withdrawEthYield(address lender) internal {}
 
-        lendersInterestPaymentPot -= ethYield;
+    function withdrawEntireLendingPosition() external {}
 
-        (bool success,) = msg.sender.call{value: ethYield}("");
-        if (!success) {
-            revert transferFailed();
-        }
-        emit EthWithdrawl(msg.sender, ethYield);
-    }
-
-    function withdrawEntireLendingPosition() external {
-        if (lentEthAmount[msg.sender] > address(this).balance) {
-            revert notEnoughEthInContract();
-        }
-        uint256 lendingPosition = lentEthAmount[msg.sender];
-        lentEthAmount[msg.sender] = 0;
-        (bool success,) = msg.sender.call{value: lendingPosition}("");
-        if (!success) {
-            revert transferFailed();
-        }
-        emit EthWithdrawl(msg.sender, lendingPosition);
-    }
+    ///////////////// WITHDRAWL PROCESS ****END**** --> LENT ETH AND ITS YIELD /////////////////
 
     /**
      * @notice Calculates a user's health factor based on the amount of ETH borrowed and the borrowing fees a user has in a specifc collateral market
@@ -435,30 +407,36 @@ contract lending {
      * @dev Reverts with the cannotCalculateHealthFactor error if the user does not have an open debt position or any borrowing fees
      */
     function getUserHealthFactorByToken(address user, IERC20 tokenAddress) public view returns (uint256 healthFactor) {
-        if (borrowedEthAmount[user] + totalBorrowFee[user] == 0) {
+        if (borrowedEthAmount[user] + userBorrowingFees[user] == 0) {
             revert cannotCalculateHealthFactor();
         }
         uint256 totalEthDebtInUSD =
-            priceConverter.getEthConversionRate((borrowedEthAmount[user] + totalBorrowFee[user]), i_priceFeed);
+            priceConverter.getEthConversionRate((borrowedEthAmount[user] + userBorrowingFees[user]), i_priceFeed);
         healthFactor = depositIndexByToken[user][tokenAddress] * 1e18 / totalEthDebtInUSD * 100;
     }
 
     /**
-     * @notice Calculates the amount of ETH yield a lender is entitled to based on borrowing activity and the lender's share of the total ETH pool less borrowing fees
+     * @notice An internal function that calculates the amount of ETH yield a lender is entitled to based on borrowing activity and the lender's share of the total ETH pool less borrowing fees
      * @param lender The address of the ETH lender whose lending payout is being calculated
      * @dev Reverts with the inputMustBeGreaterThanZero error if there is no ETH in the contract
      */
-    function getLenderPayoutAmount(address lender)
+    function _getLenderInterestFees(address lender)
         internal
         view
         moreThanZero(address(this).balance)
-        returns (uint256 lenderPayout)
+        returns (uint256 lenderInterest)
     {
         uint256 totalContractEth = address(this).balance;
-        uint256 contractEthLessBorrowingFee = totalContractEth - lendersInterestPaymentPot;
+        uint256 contractEthLessBorrowingFee = totalContractEth - lendersYieldPool;
         uint256 amountOfEthFromLender = lentEthAmount[lender];
         uint256 lenderPercentageOfEthPool = amountOfEthFromLender / contractEthLessBorrowingFee;
-        uint256 lenderProRataShareOfBorrowingFees = lenderPercentageOfEthPool * lendersInterestPaymentPot;
-        lenderPayout = amountOfEthFromLender + lenderProRataShareOfBorrowingFees;
+        lenderInterest = lenderPercentageOfEthPool * lendersYieldPool;
     }
+
+    function getTokenMinimumCollateralizationRatio(IERC20 tokenAddress)
+        public
+        view
+        isAllowedToken(tokenAddress)
+        returns (uint256 _minimumCollateralizationRatio)
+    {}
 }
