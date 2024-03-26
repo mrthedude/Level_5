@@ -57,7 +57,7 @@ contract lending {
     error notAuthorizedToCallThisFunction();
     error cannotWithdrawCollateralWithOpenDebtPositions();
     error cannotRemoveFromCollateralListWithOpenDebtPositions();
-    error cannotRepayMoreThanOpenDebtAndBorrowingFee();
+    error cannotRepayMoreThanTotalUserDebt();
     error transferFailed();
     error notEnoughEthInContract();
     error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
@@ -343,35 +343,30 @@ contract lending {
 
     /**
      * @notice Allows users to repay the ETH they borrowed from the lending contract
-     * @param amount The amount of ETH the user is repaying
-     * @dev Reverts with the cannotRepayMoreThanOpenDebtAndBorrowingFee error if the amount parameter is greater than the user's total debt (borrowing amount + borrowing fee)
-     * @dev The repay amount must be greater than zero
-     * @dev If amount <= user's userBorrowingFees: User's userBorrowingFees -= amount && amount = 0
-     * @dev If amount >= user's userBorrowingFees: User's userBorrowingFees = 0 (paid off) && the remaining amount is subtracted from the user's borrowedEthAmount
-     * @dev Updates the user's borrowedEthAmount mapping with any remaining amount
+     * @dev Reverts with the cannotRepayMoreThanTotalUserDebt error if the msg.value is greater than the user's total ETH debt
+     * @dev The msg.value must be greater than zero
+     * @dev The userBorrowingFees[] mapping is prioritized in the case that the msg.value is <= the user's borrowing fees
+     * @dev Updates the user's borrowedEthAmount[] mapping
+     * @dev Updates the user's userBorrowingFees[] mapping
      * @dev Emits the Repay event
      */
-    function repay(uint256 amount) external moreThanZero(amount) {
+    function repay() external payable moreThanZero(msg.value) {
         uint256 totalUserDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender];
-        if (totalUserDebt < amount) {
-            revert cannotRepayMoreThanOpenDebtAndBorrowingFee();
+        uint256 repaymentAmount = msg.value;
+        if (totalUserDebt < repaymentAmount) {
+            revert cannotRepayMoreThanTotalUserDebt();
         }
-        if (amount <= userBorrowingFees[msg.sender]) {
-            userBorrowingFees[msg.sender] -= amount;
-            amount = 0;
+        if (repaymentAmount <= userBorrowingFees[msg.sender]) {
+            userBorrowingFees[msg.sender] -= repaymentAmount;
+            repaymentAmount = 0;
         }
-        if (amount >= userBorrowingFees[msg.sender]) {
+        if (repaymentAmount >= userBorrowingFees[msg.sender]) {
             uint256 interestExpense = userBorrowingFees[msg.sender];
             userBorrowingFees[msg.sender] = 0;
-            amount -= interestExpense;
+            repaymentAmount -= interestExpense;
         }
-        borrowedEthAmount[msg.sender] -= amount;
-
-        (bool success,) = address(this).call{value: amount}("");
-        if (!success) {
-            revert transferFailed();
-        }
-        emit Repay(msg.sender, amount, totalUserDebt);
+        borrowedEthAmount[msg.sender] -= repaymentAmount;
+        emit Repay(msg.sender, msg.value, totalUserDebt);
     }
 
     /**
