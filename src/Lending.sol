@@ -66,7 +66,7 @@ contract lending {
     error entireDebtPositionMustBePaidToBeAbleToLiquidate();
     error cannotCalculateHealthFactor();
     error withdrawlRequestExceedsPayoutAmount();
-    error borrowingMarketHasBeenFrozen();
+    error borrowingMarketHasAlreadyBeenFrozen();
     error borrowingMarketIsCurrentlyActive();
 
     //////////////////////////
@@ -94,7 +94,7 @@ contract lending {
     /// @notice Tracks the minimum collateralization ratio for approved ERC20 token collateral, below which the borrowing position is eligible for liquidation
     mapping(IERC20 token => uint256 collateralFactor) public minimumCollateralizationRatio;
     /// @notice Tracks a market's borrowing status to see if new borrowing positions can be opened against certain ERC20 token collateral
-    mapping(IERC20 borrowMarket => bool borrowingFrozen) public borrowingMarketFrozen;
+    mapping(IERC20 borrowMarket => bool borrowingFrozen) public frozenBorrowingMarket;
     /// @notice Tracks users' health factors
     mapping(address borrower => uint256 healthFactor) public userHealthFactor;
 
@@ -103,7 +103,7 @@ contract lending {
     /////////////////
     event RemovedTokenSet(IERC20 indexed tokenAddress);
     event EthWithdrawl(address indexed user, uint256 indexed amount);
-    event BorrowingMarketHasBeenFrozen(IERC20 indexed borrowingMarket);
+    event BorrowingMarketFrozen(IERC20 indexed borrowingMarket);
     event EthDeposit(address indexed depositer, uint256 indexed amount);
     event BorrowingMarketHasBeenUnfrozen(IERC20 indexed borrowingMarket);
     event AllowedTokenSet(IERC20 indexed tokenAddress, uint256 indexed minimumCollateralizationRatio);
@@ -168,12 +168,12 @@ contract lending {
     /**
      * @notice Regulates the opening of new borrowing positions against certain ERC20 token collateral by checking if the market is frozen or unfrozen
      * @param borrowingMarket The ERC20 token borrowing market whose status is being checked to see if it is open or closed to the creation of new borrowing positions
-     * @dev Reverts with the borrowingMarketHasBeenFrozen error
+     * @dev Reverts with the borrowingMarketHasAlreadyBeenFrozen error
      * @dev Used in the following functions: deposit(), borrow()
      */
     modifier checkBorrowingMarket(IERC20 borrowingMarket) {
-        if (borrowingMarketFrozen[borrowingMarket] == true) {
-            revert borrowingMarketHasBeenFrozen();
+        if (frozenBorrowingMarket[borrowingMarket] == true) {
+            revert borrowingMarketHasAlreadyBeenFrozen();
         }
         _;
     }
@@ -217,13 +217,13 @@ contract lending {
      * @dev Only the i_owner is able to call this function
      * @dev Adds the minimumCollateralRatio to the minimumCollaterizationRatio[] array, thus setting the market's borrowing ratio limit
      * @dev Adds tokenAddress to the allowedTokens[] array
-     * @dev Sets the borrowingMarketFrozen[tokenAddress] to false, enabling new borrowing positions to be created against this collateral
+     * @dev Sets the BorrowingMarketFrozen[tokenAddress] to false, enabling new borrowing positions to be created against this collateral
      * @dev Emits the AllowedTokenSet event
      */
     function allowTokenAsCollateral(IERC20 tokenAddress, uint256 minimumCollateralRatio) external onlyOwner {
         minimumCollateralizationRatio[tokenAddress] = minimumCollateralRatio;
         allowedTokens.push(tokenAddress);
-        borrowingMarketFrozen[tokenAddress] = false;
+        frozenBorrowingMarket[tokenAddress] = false;
         emit AllowedTokenSet(tokenAddress, minimumCollateralRatio);
     }
 
@@ -232,7 +232,7 @@ contract lending {
      * @param tokenAddress The ERC20 token that is being removed from the eligible collateral list
      * @dev Only the i_owner is able to call this function
      * @dev Reverts with the cannotRemoveFromCollateralListWithOpenDebtPositions error if the collateral being removed has open debt positions
-     * @dev Sets borrowingMarketFrozen[tokenAddress] to true, prohibiting the creation of new borrowing positions against this collateral
+     * @dev Sets BorrowingMarketFrozen[tokenAddress] to true, prohibiting the creation of new borrowing positions against this collateral
      * @dev Emits the RemovedTokenSet event
      */
     function removeTokenAsCollateral(IERC20 tokenAddress) external onlyOwner isAllowedToken(tokenAddress) {
@@ -246,7 +246,7 @@ contract lending {
             }
         }
         allowedTokens = newTokenAllowList;
-        borrowingMarketFrozen[tokenAddress] = true;
+        frozenBorrowingMarket[tokenAddress] = true;
         emit RemovedTokenSet(tokenAddress);
     }
 
@@ -402,32 +402,32 @@ contract lending {
      * @param market The ERC20 token borrowing market being frozen
      * @dev Only the i_owner is able to call this function
      * @dev Only ERC20 tokens in the allowedTokens[] array can be selected for a market freeze
-     * @dev Reverts with the borrowingMarketHasBeenFrozen error if called on a market that has already been frozen
-     * @dev Sets the borrowingMarketFrozen[market] to true to prevent new borrowing positions from being opened against this ERC20 token collateral
-     * @dev Emits the BorrowingMarketHasBeenFrozen event
+     * @dev Reverts with the borrowingMarketHasAlreadyBeenFrozen error if called on a market that has already been frozen
+     * @dev Sets the frozenBorrowingMarket[market] to true to prevent new borrowing positions from being opened against this ERC20 token collateral
+     * @dev Emits the BorrowingMarketFrozen event
      */
     function freezeBorrowingMarket(IERC20 market) external onlyOwner isAllowedToken(market) {
-        if (borrowingMarketFrozen[market] == true) {
-            revert borrowingMarketHasBeenFrozen();
+        if (frozenBorrowingMarket[market] == true) {
+            revert borrowingMarketHasAlreadyBeenFrozen();
         }
-        borrowingMarketFrozen[market] = true;
-        emit BorrowingMarketHasBeenFrozen(market);
+        frozenBorrowingMarket[market] = true;
+        emit BorrowingMarketFrozen(market);
     }
 
     /**
-     * @notice Allows the i_owner to open back up (unfreeze) an ERC20 token collateral market, enabling new borrowing positions to be opened against this ERC20 token collateral
+     * @notice Allows the i_owner to re-open (unfreeze) an ERC20 token collateral market, enabling new borrowing positions to be opened against that collateral
      * @param market The ERC20 token borrowing market being unfrozen
      * @dev Only the i_owner is able to call this function
      * @dev Only ERC20 tokens in the allowedTokens[] array can be selected for a makert unfreeze
-     * @dev Reverts with the borrowingMarketIsCurrentlyActive error if called on a market that is not currently frozen
-     * @dev Sets the borrowingMarketFrozen[market] to false to enable the opening of new borrowing positions against this ERC20 token collateral
+     * @dev Reverts with the borrowingMarketIsCurrentlyActive error if called on a market that is not frozen
+     * @dev Sets the frozenBorrowingMarket[market] to false to enable the opening of new borrowing positions against this ERC20 token collateral
      * @dev Emits the BorrowingMarketHasBeenUnfrozen event
      */
     function unfreezeBorrowingMarket(IERC20 market) external onlyOwner isAllowedToken(market) {
-        if (borrowingMarketFrozen[market] == false) {
+        if (frozenBorrowingMarket[market] == false) {
             revert borrowingMarketIsCurrentlyActive();
         }
-        borrowingMarketFrozen[market] = false;
+        frozenBorrowingMarket[market] = false;
         emit BorrowingMarketHasBeenUnfrozen(market);
     }
 
