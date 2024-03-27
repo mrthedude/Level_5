@@ -68,6 +68,7 @@ contract lending {
     error withdrawlRequestExceedsPayoutAmount();
     error borrowingMarketHasAlreadyBeenFrozen();
     error borrowingMarketIsCurrentlyActive();
+    error cannotWithdrawMoreEthThanLenderIsEntitledTo();
 
     //////////////////////////
     //// State Variables ////
@@ -431,28 +432,51 @@ contract lending {
         emit BorrowingMarketHasBeenUnfrozen(market);
     }
 
-    ///////////////// WITHDRAWL PROCESS --> LENT ETH AND ITS YIELD /////////////////
-
+    ///////////////// WITHDRAWL PROCESS --> Withdraw lent ETH, Withdraw yield generated from lending ETH /////////////////
+    /**
+     * CURRENT PROBLEM WITH WITHDRAW PROCESS:
+     * A user could call withdrawLentEth() recursively to keep withdrawing for the lenders ETH yield pool
+     * Need to make a mapping that accounts for each lenders' interest yield individually to prevent users from taking more than their pro-rata share of the pot
+     */
     function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) {
-        if (amountOfEth > lentEthAmount[msg.sender]) {
-            revert withdrawlRequestExceedsPayoutAmount();
+        uint256 withdrawAmount = amountOfEth;
+        address lenderAddress = msg.sender;
+        uint256 maximumLenderEthAllocation = _getLenderInterestFees(lenderAddress) + lentEthAmount[msg.sender];
+
+        if (amountOfEth > maximumLenderEthAllocation) {
+            revert cannotWithdrawMoreEthThanLenderIsEntitledTo();
         }
         if (amountOfEth > address(this).balance) {
             revert notEnoughEthInContract();
         }
-        lentEthAmount[msg.sender] -= amountOfEth;
+        if (amountOfEth <= _getLenderInterestFees(lenderAddress)) {
+            lendersYieldPool -= withdrawAmount;
+            withdrawAmount = 0;
+        }
+        if (amountOfEth >= _getLenderInterestFees(lenderAddress)) {
+            lendersYieldPool -= _getLenderInterestFees(lenderAddress);
+            withdrawAmount -= _getLenderInterestFees(lenderAddress);
+            lentEthAmount[msg.sender] -= withdrawAmount;
+        }
+
+        lentEthAmount[msg.sender] -= withdrawAmount;
+
         (bool success,) = msg.sender.call{value: amountOfEth}("");
         if (!success) {
             revert transferFailed();
         }
-        emit EthWithdrawl(msg.sender, amountOfEth);
     }
 
-    function _withdrawEthYield(address lender) internal {}
+    function withdrawEthYield() external moreThanZero(_getLenderInterestFees(msg.sender)) {
+        uint256 lenderEthYield = _getLenderInterestFees(msg.sender);
 
-    function withdrawEntireLendingPosition() external {}
+        if (lenderEthYield > address(this).balance) {
+            revert notEnoughEthInContract();
+        }
+        lendersYieldPool -= lenderEthYield;
+    }
 
-    ///////////////// WITHDRAWL PROCESS ****END**** --> LENT ETH AND ITS YIELD /////////////////
+    ///////////////// WITHDRAWL PROCESS --> Withdraw lent ETH, Withdraw yield generated from lending ETH /////////////////
 
     /**
      * @notice Calculates a user's health factor in a specific ERC20 token borrowing market by dividing the amount of tokens the user deposited by their total ETH debt
@@ -483,9 +507,9 @@ contract lending {
         returns (uint256 lenderInterest)
     {
         uint256 totalContractEth = address(this).balance;
-        uint256 contractEthLessBorrowingFee = totalContractEth - lendersYieldPool;
+        uint256 contractEthLessBorrowingFees = totalContractEth - lendersYieldPool;
         uint256 amountOfEthFromLender = lentEthAmount[lender];
-        uint256 lenderPercentageOfEthPool = amountOfEthFromLender / contractEthLessBorrowingFee;
+        uint256 lenderPercentageOfEthPool = amountOfEthFromLender / contractEthLessBorrowingFees;
         lenderInterest = lenderPercentageOfEthPool * lendersYieldPool;
     }
 
@@ -495,6 +519,4 @@ contract lending {
         isAllowedToken(tokenAddress)
         returns (uint256 _minimumCollateralizationRatio)
     {}
-
-    function getUserHealthFactor(address users) public view returns (uint256 healthFactor) {}
 }
