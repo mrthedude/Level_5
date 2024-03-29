@@ -124,7 +124,7 @@ contract lending {
     ///////////////////
 
     /**
-     * @notice Modifier to restrict which ERC20 tokens are eligible to be used as collateral for borrowing lent ETH
+     * @notice Modifier to check if an ERC20 token is eligible to be used as collateral for borrowing lent ETH
      * @param tokenAddress The address of the ERC20 token being checked for collateral eligibility
      * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), liquidate(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
      */
