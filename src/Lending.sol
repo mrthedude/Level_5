@@ -127,6 +127,7 @@ contract lending {
      * @notice Modifier to check if an ERC20 token is eligible to be used as collateral for borrowing lent ETH
      * @param tokenAddress The address of the ERC20 token being checked for collateral eligibility
      * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), liquidate(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
+     * @dev Reverts with the notEligibleAsCollateral error if the ERC20 token is not in the allowedTokens[] array
      */
     modifier isAllowedToken(IERC20 tokenAddress) {
         bool included = false;
@@ -145,6 +146,7 @@ contract lending {
      * @notice Modifier to ensure the function call parameter is more than zero
      * @param amount The input amount being checked in the function call
      * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), withdrawLentEth(), withdrawEthYield(), calculateLenderEthYield()
+     * @dev Reverts with the inputMustBeGreaterThanZero error if the function parameter is less than or equal to zero
      */
     modifier moreThanZero(uint256 amount) {
         if (amount <= 0) {
@@ -157,6 +159,7 @@ contract lending {
      *
      * @notice Modifier that restricts access to certain functions to only the i_owner
      * @dev Used in the following functions: allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
+     * @dev Reverts with the notAuthorizedToCallThisFunction error if the msg.sender is not i_owner
      */
     modifier onlyOwner() {
         if (msg.sender != i_owner) {
@@ -168,8 +171,8 @@ contract lending {
     /**
      * @notice Regulates the opening of new borrowing positions against certain ERC20 token collateral by checking if the market is frozen or unfrozen
      * @param borrowingMarket The ERC20 token borrowing market whose status is being checked to see if it is open or closed to the creation of new borrowing positions
-     * @dev Reverts with the borrowingMarketHasAlreadyBeenFrozen error
      * @dev Used in the following functions: deposit(), borrow()
+     * @dev Reverts with the borrowingMarketHasAlreadyBeenFrozen error if the market has already been frozen (closed)
      */
     modifier checkBorrowingMarket(IERC20 borrowingMarket) {
         if (frozenBorrowingMarket[borrowingMarket] == true) {
