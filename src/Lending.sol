@@ -412,7 +412,7 @@ contract lending {
      * @dev Only the i_owner is able to call this function
      * @dev Only ERC20 tokens in the allowedTokens[] array can be selected for a market freeze
      * @dev Reverts with the borrowingMarketHasAlreadyBeenFrozen error if called on a market that has already been frozen
-     * @dev Sets the frozenBorrowingMarket[market] to true to prevent new borrowing positions from being opened against this ERC20 token collateral
+     * @dev Updates the frozenBorrowingMarket[market] to true, preventing new borrowing positions from being opened against this ERC20 token collateral
      * @dev Emits the BorrowingMarketFrozen event
      */
     function freezeBorrowingMarket(IERC20 market) external onlyOwner isAllowedToken(market) {
