@@ -141,12 +141,10 @@ contract lending {
         _;
     }
 
-    ///////////////////////////// TO DO: NEED TO EDIT NOTES FOR WHICH FUNCTIONS USE THIS MODIFIER AFTER WITHDRAW ETH FUNCTIONS HAVE BEEN WRITTEN /////////////////////////////
-
     /**
      * @notice Modifier to ensure the function call parameter is more than zero
      * @param amount The input amount being checked in the function call
-     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), withdrawLentEth(), calculateLenderEthYield()
+     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), withdrawLentEth(), withdrawEthYield(), calculateLenderEthYield()
      */
     modifier moreThanZero(uint256 amount) {
         if (amount <= 0) {
