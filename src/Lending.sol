@@ -238,11 +238,11 @@ contract lending {
     }
 
     /**
-     * @notice Removes an ERC20 token from the list of eligible ERC20 token collateral that can be used to borrow lent ETH against
+     * @notice Removes an ERC20 token from the eligible collateral list that can be used to borrow lent ETH against
      * @param tokenAddress The ERC20 token that is being removed from the eligible collateral list
      * @dev Only the i_owner is able to call this function
      * @dev Reverts with the cannotRemoveFromCollateralListWithOpenDebtPositions error if the collateral being removed has open debt positions
-     * @dev Sets BorrowingMarketFrozen[tokenAddress] to true, prohibiting the creation of new borrowing positions against this collateral
+     * @dev Updates the BorrowingMarketFrozen[tokenAddress] to true, prohibiting the creation of new borrowing positions against this collateral
      * @dev Emits the RemovedTokenSet event
      */
     function removeTokenAsCollateral(IERC20 tokenAddress) external onlyOwner isAllowedToken(tokenAddress) {
