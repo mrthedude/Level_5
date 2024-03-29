@@ -310,7 +310,7 @@ contract lending {
      * @notice Every successful borrow() function call will incure a borrowing fee of 5% the amount borrowed, which is then added to the lenders' claimable yield pool
      * @param ethBorrowAmount The amount of ETH the user specifies to borrow
      * @param tokenCollateral The deposited ERC20 token collateral that the ETH is being borrowed against
-     * @dev Only approved, user-deposited ERC20 token collateral may be borrowed against
+     * @dev Only user-deposited ERC20 tokens in the allowedTokens[] array may be borrowed against
      * @dev The amount being borrowed must be greater than zero
      * @dev Reverts with the notEnoughEthInContract error if the ethBorrowAmount exceeds the amount of ETH held in the contract
      * @dev Reverts with the notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth error if the borrow request will cause the user's health factor to fall below the minimum collateralization ratio for that ERC20 token borrowing market
@@ -348,7 +348,7 @@ contract lending {
             revert transferFailed();
         }
 
-        emit Borrow(msg.sender, ethBorrowAmount, borrowedEthAmount[msg.sender]);
+        emit Borrow(msg.sender, ethBorrowAmount, borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender]);
     }
 
     /**
