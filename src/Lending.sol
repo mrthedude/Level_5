@@ -537,7 +537,8 @@ contract lending {
     /**
      * @notice Allows ETH lenders to withdraw their entire ETH yield, accrued from borrowing activity
      * @dev Reverts with the notEnoughEthInContract error if the lender's ETH yield is greater than the amount of ETH currently in the contract
-     * @dev Updates the lendersYieldPool
+     * @dev Updates the lendersYieldPool variable
+     * @dev Updates the lenderIndexOfDepositTimestamps mapping
      * @dev Emits the EthWitdrawl event
      */
     function withdrawEthYield() external moreThanZero(calculateLenderEthYield(msg.sender)) {
@@ -548,7 +549,7 @@ contract lending {
         }
         lendersYieldPool -= ethYield;
 
-        // The timestamps for deposits are reset to the current block-time (zero'd out) so that the lender's claimable yield is reset to zero after claiming
+        // The timestamps for ETH deposits are set to the current block-time so that the lender's claimable yield is reset to zero
         for (uint256 i = 0; i < ethLenderDepositList[msg.sender].length; i++) {
             lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][i]] = block.timestamp;
         }
