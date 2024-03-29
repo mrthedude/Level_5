@@ -379,14 +379,14 @@ contract lending {
     }
 
     /**
-     * @notice Allows users to liquidate the deposited collateral of other users whose loan(s) have fallen below the collateral market's minimum collateralization ratio
+     * @notice Allows users to liquidate deposited collateral of other users whose loan(s) have fallen below the collateral market's minimum collateralization ratio
      * @param debtor The address of the user who is eligible to have their collateral liquidated
-     * @param tokenAddress The token address of the ERC20 token collateral being liquidated
-     * @dev Only approved ERC20 token collateral may be liquidated
+     * @param tokenAddress The ERC20 token collateral being liquidated
+     * @dev Only ERC20 tokens in the allowedTokens[] array may be liquidated
      * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not below the minimum collateralization ratio for that borrowing market
      * @dev Reverts with the exactDebtAmountMustBeRepaid error if the msg.value doesn't match the debtor's exact ETH debt
-     * @dev Updates the debtor's depositIndexByToken to 0 for that collateral market
-     * @dev Updates the debtor's userBorrowingFees to 0
+     * @dev Updates the depositIndexByToken mapping
+     * @dev Updates the userBorrowingFees mapping
      * @dev Emits the Liquidate event
      *
      */
