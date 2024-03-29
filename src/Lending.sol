@@ -43,9 +43,9 @@ using SafeERC20 for IERC20;
 /**
  * @title lending
  * @author mrthedude
- * @notice This lending and borrowing contract allows users to lend ETH and earn yield from other users who borrow this ETH against approved ERC20 token collateral
+ * @notice This lending and borrowing contract allows users to lend ETH and earn yield from borrowers taking collateralized loans with approved ERC20 tokens
  * @dev Uses a Chainlink ETH/USD pricefeed oracle to update LTVs on outstanding borrowing positions
- * @dev Incorporates a fixed borrowing fee of 5% the amount of ETH borrowed and considers the value of each collateralized ERC20 token to be $1 for simplicity
+ * @dev Incorporates a fixed borrowing fee of 5% the amount of ETH borrowed and considers the value of each collateralized ERC20 token to be $1 per token for simplicity
  */
 contract lending {
     /////////////////
