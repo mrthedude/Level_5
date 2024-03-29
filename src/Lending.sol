@@ -424,12 +424,12 @@ contract lending {
     }
 
     /**
-     * @notice Allows the i_owner to re-open (unfreeze) an ERC20 token collateral market, enabling new borrowing positions to be opened against that collateral
+     * @notice Allows the i_owner to open (unfreeze) an ERC20 token borrowing market, enabling the creation of new borrowing positions against this collateral
      * @param market The ERC20 token borrowing market being unfrozen
      * @dev Only the i_owner is able to call this function
      * @dev Only ERC20 tokens in the allowedTokens[] array can be selected for a makert unfreeze
      * @dev Reverts with the borrowingMarketIsCurrentlyActive error if called on a market that is not frozen
-     * @dev Sets the frozenBorrowingMarket[market] to false to enable the opening of new borrowing positions against this ERC20 token collateral
+     * @dev Updates the frozenBorrowingMarket[market] to false, enabling new borrowing positions to be opened against this ERC20 token collateral
      * @dev Emits the BorrowingMarketHasBeenUnfrozen event
      */
     function unfreezeBorrowingMarket(IERC20 market) external onlyOwner isAllowedToken(market) {
