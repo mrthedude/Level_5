@@ -84,6 +84,10 @@ contract lending {
     uint256 public lendersYieldPool;
     /// @notice The total amount of ETH lenders have deposited into the contract
     uint256 totalLentEth;
+
+    /// @notice Records leftover ETH yield amounts for lenders that withdraw an amount of ETH less than their acrrued ETH yield
+    uint256 lenderLeftoverEthYield;
+
     /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
     IERC20[] public allowedTokens;
 
@@ -441,13 +445,18 @@ contract lending {
     }
 
     /**
-     * @notice Allows ETH lenders to withdraw their lent ETH and ETH yield generated from borrowing activity
-     * @param amountOfEth The amount of ETH the lender is withdrawing to their address
-     * @dev Reverts with the cannotWithdrawMoreEthThanLenderIsEntitledTo error if the lender tries to withdraw an amount more than their lent ETH and ETH yield combined
+     * @notice Allows ETH lenders to withdraw their lent ETH and their ETH yield generated from borrowing activity
+     * @param amountOfEth The amount of ETH the lender is withdrawing
+     * @dev Reverts with the cannotWithdrawMoreEthThanLenderIsEntitledTo error if the lender tries to withdraw more than their lent ETH and ETH yield combined
      * @dev Reverts with the notEnoughEthInContract error if the lender tries to withdraw more ETH than what is currently held in the contract
-     * @dev Prioritizes withdrawing from the user's ETH yield if the amount requested to be withdrawn is <= their amount of ETH yield
-     * @dev Updates the lendersYieldPool
-     * @dev Updates the lentEthAmount[] mapping
+     * @dev The function is organized into three main logic sections separated by if the amount of ETH being withdrawn is:
+     *      (1) Less than the lender's amount of ETH yield
+     *      (2) Equal to the lender's amount of ETH yield
+     *      (3) Greater than the lender's amount of ETH yield
+     * @dev Updates the lendersYieldPool variable
+     * @dev Updates the lenderLentEthAmount[] mapping
+     * @dev Updates the ethLenderDepositList[] mapping
+     * @dev Updates the lenderIndexOfDepositTimestamps[] mapping
      * @dev Emits the EthWithdrawl event
      */
     function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) {
@@ -460,16 +469,21 @@ contract lending {
         if (amountOfEth > address(this).balance) {
             revert notEnoughEthInContract();
         }
-        // When withdrawing exclusively from the lender's ETH yield
-        if (amountOfEth <= calculateLenderEthYield(msg.sender)) {
+
+        //// When withdrawing an amount less than the lender's ETH yield ////
+        if (amountOfEth < calculateLenderEthYield(msg.sender)) {
             lendersYieldPool -= withdrawAmount;
 
-            // The timestamps for deposits are reset to the current block-time (zero'd out) so that the lender's claimable yield is reset to zero after claiming
+            // To prevent forfeiting leftover yield, the lender's remaining yield is added to their claimable lent ETH amount
+            // and accounted for as a new deposit in the lender's deposit list
+            uint256 remainingLenderYield = calculateLenderEthYield(msg.sender) - withdrawAmount;
+            lenderLentEthAmount[msg.sender] += remainingLenderYield;
+            ethLenderDepositList[msg.sender].push(remainingLenderYield);
+
+            // The timestamps for ETH deposits are set to the current block-time so that the lender's claimable yield is reset to zero
             for (uint256 i = 0; i < ethLenderDepositList[msg.sender].length; i++) {
                 lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][i]] = block.timestamp;
             }
-
-            withdrawAmount = 0;
             (bool success,) = msg.sender.call{value: amountOfEth}("");
             if (!success) {
                 revert transferFailed();
@@ -477,24 +491,42 @@ contract lending {
             emit EthWithdrawl(msg.sender, amountOfEth);
         }
 
-        // When withdrawing from both the lender's ETH yield and their own deposited ETH
-        if (amountOfEth >= calculateLenderEthYield(msg.sender)) {
+        //// When withdrawing an amount equal to the lender's ETH yield ////
+        if (amountOfEth == calculateLenderEthYield(msg.sender)) {
+            lendersYieldPool -= amountOfEth;
+
+            // The timestamps for ETH deposits are set to the current block-time so that the lender's claimable yield is reset to zero
+            for (uint256 i = 0; i < ethLenderDepositList[msg.sender].length; i++) {
+                lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][i]] = block.timestamp;
+            }
+            (bool success,) = msg.sender.call{value: amountOfEth}("");
+            if (!success) {
+                revert transferFailed();
+            }
+            emit EthWithdrawl(msg.sender, amountOfEth);
+        }
+
+        //// When withdrawing an amount greater than the lender's ETH yield ////
+        if (amountOfEth > calculateLenderEthYield(msg.sender)) {
             lendersYieldPool -= calculateLenderEthYield(msg.sender);
             withdrawAmount -= calculateLenderEthYield(msg.sender);
             lenderLentEthAmount[msg.sender] -= withdrawAmount;
-            // The timestamps for deposits are reset to zero so that the lender can't try to claim yield off of old timestamps
+
+            // The timestamps for deposits are set to zero so that the lender can't claim yield off of expired timestamps
             for (uint256 i = 0; i < ethLenderDepositList[msg.sender].length; i++) {
                 lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][i]] = 0;
             }
-            // Clears the lender's deposit list to enable fresh accounting of balances
+
+            // Clears the lender's deposit list to enable new accounting of their lent ETH balance
             uint256 arrayLength = ethLenderDepositList[msg.sender].length;
             for (uint256 i = arrayLength; i > 0; i--) {
                 ethLenderDepositList[msg.sender].pop;
             }
-            // Adds the remaining ETH the lender still has in the contract to their deposit list if this value is greater than zero
+
+            // If the lender has any ETH still in the contract, it is added onto their new deposit list and the timestamp recorded with the current block-time
             if (lenderLentEthAmount[msg.sender] > 0) {
-                uint256 endOfArray = ethLenderDepositList[msg.sender].length - 1;
                 ethLenderDepositList[msg.sender].push(lenderLentEthAmount[msg.sender]);
+                uint256 endOfArray = ethLenderDepositList[msg.sender].length - 1;
                 lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][endOfArray]] =
                     block.timestamp;
             }
