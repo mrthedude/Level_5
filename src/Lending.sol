@@ -83,6 +83,9 @@ contract lending {
     uint256 public lendersYieldPool;
     /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
     IERC20[] public allowedTokens;
+    uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // (60sec * 60mins * 24hrs * 365days)
+    /// @notice The total amount of ETH lenders have deposited into the contract
+    uint256 totalLentEth;
 
     /// @notice Tracks the deposit balance of the ERC20 tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
@@ -90,14 +93,18 @@ contract lending {
     mapping(address borrower => uint256 amount) public borrowedEthAmount;
     /// @notice Tracks a user's total borrowing fees which must be paid to the contract in order to withdraw the deposited collateral
     mapping(address borrower => uint256 userBorrowingFees) public userBorrowingFees;
-    /// @notice Tracks the amount of ETH a user has lent to the contract
-    mapping(address lender => uint256 ethAmount) public lentEthAmount;
     /// @notice Tracks the minimum collateralization ratio for approved ERC20 token collateral, below which the borrowing position is eligible for liquidation
     mapping(IERC20 token => uint256 collateralFactor) public minimumCollateralizationRatio;
     /// @notice Tracks a market's borrowing status to see if new borrowing positions can be opened against certain ERC20 token collateral
     mapping(IERC20 borrowMarket => bool borrowingFrozen) public frozenBorrowingMarket;
     /// @notice Tracks users' health factors
     mapping(address borrower => uint256 healthFactor) public userHealthFactor;
+    /// @notice Tracks the individual lenders' ETH deposits
+    mapping(address lender => uint256) public lenderLentEthAmount;
+    /// @notice Tracks the individual lenders' ETH deposits in a granular way, allowing for timestamp tracking when paired with lenderIndexOfDepositTimestamps
+    mapping(address lender => uint256[] lenderDeposits) public ethLenderDepositList;
+    /// @notice Tracks when lenders made each one of their ETH deposits
+    mapping(address lender => mapping(uint256 depositAmount => uint256 timestamp)) public lenderIndexOfDepositTimestamps;
 
     //////////////////
     //// Events /////
@@ -145,7 +152,7 @@ contract lending {
     /**
      * @notice Modifier to ensure the function call parameter is more than zero
      * @param amount The input amount being checked in the function call
-     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), withdrawLentEth(), _getLenderInterestFees()
+     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), withdrawLentEth(), calculateLenderEthYield()
      */
     modifier moreThanZero(uint256 amount) {
         if (amount <= 0) {
@@ -193,12 +200,19 @@ contract lending {
     }
 
     /**
+     * NEED TO UPDATE THE COMMENTS OF THIS FUNCTION
      * @notice Allows the lending contract to receive deposits of Ether
-     * @dev Updates the msg.sender's lentEthAmount
+     * @dev Updates the msg.sender's lentEthAmount mapping
+     * @dev Updates the ethLenderDepositList mapping
+     * @dev Updates the lenderIndexOfDepositTimestamps mapping
      * @dev Emits the EthDeposit event
      */
     receive() external payable {
-        lentEthAmount[msg.sender] += msg.value;
+        ethLenderDepositList[msg.sender].push(msg.value);
+        lenderIndexOfDepositTimestamps[msg.sender][msg.value] = block.timestamp;
+        totalLentEth += msg.value;
+        lenderLentEthAmount[msg.sender] += msg.value;
+
         emit EthDeposit(msg.sender, msg.value);
     }
 
@@ -432,16 +446,19 @@ contract lending {
         emit BorrowingMarketHasBeenUnfrozen(market);
     }
 
-    ///////////////// WITHDRAWL PROCESS --> Withdraw lent ETH, Withdraw yield generated from lending ETH /////////////////
     /**
-     * CURRENT PROBLEM WITH WITHDRAW PROCESS:
-     * A user could call withdrawLentEth() recursively to keep withdrawing for the lenders ETH yield pool
-     * Need to make a mapping that accounts for each lenders' interest yield individually to prevent users from taking more than their pro-rata share of the pot
+     * @notice Allows ETH lenders to withdraw their lent ETH and ETH yield generated from borrowing activity
+     * @param amountOfEth The amount of ETH the lender is withdrawing to their address
+     * @dev Reverts with the cannotWithdrawMoreEthThanLenderIsEntitledTo error if the lender tries to withdraw an amount more than their lent ETH and ETH yield combined
+     * @dev Reverts with the notEnoughEthInContract error if the lender tries to withdraw more ETH than what is currently held in the contract
+     * @dev Prioritizes withdrawing from the user's ETH yield if the amount requested to be withdrawn is <= their amount of ETH yield
+     * @dev Updates the lendersYieldPool
+     * @dev Updates the lentEthAmount[] mapping
+     * @dev Emits the EthWithdrawl event
      */
     function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) {
         uint256 withdrawAmount = amountOfEth;
-        address lenderAddress = msg.sender;
-        uint256 maximumLenderEthAllocation = _getLenderInterestFees(lenderAddress) + lentEthAmount[msg.sender];
+        uint256 maximumLenderEthAllocation = calculateLenderEthYield(msg.sender) + lenderLentEthAmount[msg.sender];
 
         if (amountOfEth > maximumLenderEthAllocation) {
             revert cannotWithdrawMoreEthThanLenderIsEntitledTo();
@@ -449,34 +466,110 @@ contract lending {
         if (amountOfEth > address(this).balance) {
             revert notEnoughEthInContract();
         }
-        if (amountOfEth <= _getLenderInterestFees(lenderAddress)) {
+        // When withdrawing exclusively from the lender's ETH yield
+        if (amountOfEth <= calculateLenderEthYield(msg.sender)) {
             lendersYieldPool -= withdrawAmount;
+
+            // The timestamps for deposits are reset to the current block-time (zero'd out) so that the lender's claimable yield is reset to zero after claiming
+            for (uint256 i = 0; i < ethLenderDepositList[msg.sender].length; i++) {
+                lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][i]] = block.timestamp;
+            }
+
             withdrawAmount = 0;
-        }
-        if (amountOfEth >= _getLenderInterestFees(lenderAddress)) {
-            lendersYieldPool -= _getLenderInterestFees(lenderAddress);
-            withdrawAmount -= _getLenderInterestFees(lenderAddress);
-            lentEthAmount[msg.sender] -= withdrawAmount;
+            (bool success,) = msg.sender.call{value: amountOfEth}("");
+            if (!success) {
+                revert transferFailed();
+            }
+            emit EthWithdrawl(msg.sender, amountOfEth);
         }
 
-        lentEthAmount[msg.sender] -= withdrawAmount;
+        // When withdrawing from both the lender's ETH yield and their own deposited ETH
+        if (amountOfEth >= calculateLenderEthYield(msg.sender)) {
+            lendersYieldPool -= calculateLenderEthYield(msg.sender);
+            withdrawAmount -= calculateLenderEthYield(msg.sender);
+            lenderLentEthAmount[msg.sender] -= withdrawAmount;
+            // The timestamps for deposits are reset to zero so that the lender can't try to claim yield off of old timestamps
+            for (uint256 i = 0; i < ethLenderDepositList[msg.sender].length; i++) {
+                lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][i]] = 0;
+            }
+            // Clears the lender's deposit list to enable fresh accounting of balances
+            uint256 arrayLength = ethLenderDepositList[msg.sender].length;
+            for (uint256 i = arrayLength; i > 0; i--) {
+                ethLenderDepositList[msg.sender].pop;
+            }
+            // Adds the remaining ETH the lender still has in the contract to their deposit list if this value is greater than zero
+            if (lenderLentEthAmount[msg.sender] > 0) {
+                uint256 endOfArray = ethLenderDepositList[msg.sender].length - 1;
+                ethLenderDepositList[msg.sender].push(lenderLentEthAmount[msg.sender]);
+                lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][endOfArray]] =
+                    block.timestamp;
+            }
+            (bool success,) = msg.sender.call{value: amountOfEth}("");
+            if (!success) {
+                revert transferFailed();
+            }
+            emit EthWithdrawl(msg.sender, amountOfEth);
+        }
+    }
 
-        (bool success,) = msg.sender.call{value: amountOfEth}("");
+    /**
+     * @notice Allows ETH lenders to withdraw their entire ETH yield, accrued from borrowing activity
+     * @dev Reverts with the notEnoughEthInContract error if the lender's ETH yield is greater than the amount of ETH currently in the contract
+     * @dev Updates the lendersYieldPool
+     * @dev Emits the EthWitdrawl event
+     */
+    function withdrawEthYield() external moreThanZero(calculateLenderEthYield(msg.sender)) {
+        uint256 ethYield = calculateLenderEthYield(msg.sender);
+
+        if (ethYield > address(this).balance) {
+            revert notEnoughEthInContract();
+        }
+        lendersYieldPool -= ethYield;
+
+        // The timestamps for deposits are reset to the current block-time (zero'd out) so that the lender's claimable yield is reset to zero after claiming
+        for (uint256 i = 0; i < ethLenderDepositList[msg.sender].length; i++) {
+            lenderIndexOfDepositTimestamps[msg.sender][ethLenderDepositList[msg.sender][i]] = block.timestamp;
+        }
+
+        (bool success,) = msg.sender.call{value: ethYield}("");
         if (!success) {
             revert transferFailed();
         }
+        emit EthWithdrawl(msg.sender, ethYield);
     }
 
-    function withdrawEthYield() external moreThanZero(_getLenderInterestFees(msg.sender)) {
-        uint256 lenderEthYield = _getLenderInterestFees(msg.sender);
-
-        if (lenderEthYield > address(this).balance) {
-            revert notEnoughEthInContract();
+    /**
+     * @notice Calculates the amount of ETH yield a lender is entitled to based on borrowing activity and the lender's share of the total ETH pool less borrowing fees
+     * @param lender The address of the ETH lender whose lending payout is being calculated
+     * @dev Reverts with the inputMustBeGreaterThanZero error if there is no ETH in the contract     *
+     */
+    function calculateLenderEthYield(address lender)
+        public
+        view
+        moreThanZero(address(this).balance)
+        returns (uint256 currentLenderEthYield)
+    {
+        // Calculate the combined time of lender's ETH deposits
+        uint256 totalTimeEthLent;
+        for (uint256 i = 0; i < ethLenderDepositList[lender].length; i++) {
+            // Checks to see if there is an old timestamp being reviewed, if so then it will not be added to the totalTimeEthLent variable
+            if (lenderIndexOfDepositTimestamps[lender][ethLenderDepositList[lender][i]] != 0) {
+                totalTimeEthLent +=
+                    block.timestamp - lenderIndexOfDepositTimestamps[lender][ethLenderDepositList[lender][i]];
+            }
         }
-        lendersYieldPool -= lenderEthYield;
-    }
+        // Calculate the percentage of the lender's claimable yield that they can claim currently
+        uint256 percentageOfEthYieldClaimable = totalTimeEthLent / SECONDS_IN_A_YEAR;
 
-    ///////////////// WITHDRAWL PROCESS --> Withdraw lent ETH, Withdraw yield generated from lending ETH /////////////////
+        // Calculate the lender's percentage of lent ETH in the entire ETH pool
+        uint256 lenderEthPercentageOfPool = lenderLentEthAmount[lender] / totalLentEth;
+
+        // Calculate the maximum amount of ETH the lender can claim from the ETH yield pool
+        uint256 maximumEthYieldLenderCanClaimFromYieldPool = lenderEthPercentageOfPool * lendersYieldPool;
+
+        // Calculate the amount of the lender's ETH yield they can currently claim: maximumEthYieldLenderCanClaimFromYieldPool * percentageOfEthYieldClaimable
+        currentLenderEthYield = maximumEthYieldLenderCanClaimFromYieldPool * percentageOfEthYieldClaimable;
+    }
 
     /**
      * @notice Calculates a user's health factor in a specific ERC20 token borrowing market by dividing the amount of tokens the user deposited by their total ETH debt
@@ -495,28 +588,12 @@ contract lending {
         healthFactor = depositIndexByToken[user][tokenAddress] * 1e18 / totalEthDebtInUSD * 100;
     }
 
-    /**
-     * @notice An internal function that calculates the amount of ETH yield a lender is entitled to based on borrowing activity and the lender's share of the total ETH pool less borrowing fees
-     * @param lender The address of the ETH lender whose lending payout is being calculated
-     * @dev Reverts with the inputMustBeGreaterThanZero error if there is no ETH in the contract
-     */
-    function _getLenderInterestFees(address lender)
-        internal
-        view
-        moreThanZero(address(this).balance)
-        returns (uint256 lenderInterest)
-    {
-        uint256 totalContractEth = address(this).balance;
-        uint256 contractEthLessBorrowingFees = totalContractEth - lendersYieldPool;
-        uint256 amountOfEthFromLender = lentEthAmount[lender];
-        uint256 lenderPercentageOfEthPool = amountOfEthFromLender / contractEthLessBorrowingFees;
-        lenderInterest = lenderPercentageOfEthPool * lendersYieldPool;
-    }
-
     function getTokenMinimumCollateralizationRatio(IERC20 tokenAddress)
         public
         view
         isAllowedToken(tokenAddress)
         returns (uint256 _minimumCollateralizationRatio)
-    {}
+    {
+        _minimumCollateralizationRatio = minimumCollateralizationRatio[tokenAddress];
+    }
 }
