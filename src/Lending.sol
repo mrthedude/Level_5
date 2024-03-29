@@ -116,12 +116,8 @@ contract lending {
     event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed totalUserEthDebt);
     event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed totalUserEthDebt);
     event Withdraw(address indexed user, IERC20 indexed withdrawnTokenAddress, uint256 indexed amountWithdrawn);
-    event ERC20Deposit(
-        address indexed depositer, IERC20 indexed depositedTokenAddress, uint256 indexed amountDeposited
-    );
-    event Liquidate(
-        address indexed debtor, IERC20 indexed tokenCollateralAddress, uint256 indexed tokenAmountLiquidated
-    );
+    event ERC20Deposit(address indexed depositer, IERC20 indexed tokenAddress, uint256 indexed amountDeposited);
+    event Liquidate(address indexed debtor, IERC20 indexed tokenAddress, uint256 indexed tokenAmountLiquidated);
 
     ////////////////////
     //// Modifiers ////
