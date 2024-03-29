@@ -63,7 +63,7 @@ contract lending {
     error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
     error cannotWithdrawMoreCollateralThanWhatWasDeposited();
     error userIsNotEligibleForLiquidation();
-    error entireDebtPositionMustBePaidToBeAbleToLiquidate();
+    error exactDebtAmountMustBeRepaid();
     error cannotCalculateHealthFactor();
     error borrowingMarketHasAlreadyBeenFrozen();
     error borrowingMarketIsCurrentlyActive();
@@ -384,7 +384,7 @@ contract lending {
      * @param tokenAddress The token address of the ERC20 token collateral being liquidated
      * @dev Only approved ERC20 token collateral may be liquidated
      * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not below the minimum collateralization ratio for that borrowing market
-     * @dev Reverts with the entireDebtPositionMustBePaidToBeAbleToLiquidate error if the msg.value doesn't match the debtor's exact ETH debt
+     * @dev Reverts with the exactDebtAmountMustBeRepaid error if the msg.value doesn't match the debtor's exact ETH debt
      * @dev Updates the debtor's depositIndexByToken to 0 for that collateral market
      * @dev Updates the debtor's userBorrowingFees to 0
      * @dev Emits the Liquidate event
@@ -396,7 +396,7 @@ contract lending {
             revert userIsNotEligibleForLiquidation();
         }
         if (msg.value != totalUserDebt) {
-            revert entireDebtPositionMustBePaidToBeAbleToLiquidate();
+            revert exactDebtAmountMustBeRepaid();
         }
         uint256 collateralAmount = depositIndexByToken[debtor][tokenAddress];
         depositIndexByToken[debtor][tokenAddress] = 0;
