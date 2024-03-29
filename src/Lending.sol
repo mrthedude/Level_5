@@ -122,7 +122,6 @@ contract lending {
     ////////////////////
     //// Modifiers ////
     ///////////////////
-
     /**
      * @notice Modifier to check if an ERC20 token is eligible to be used as collateral for borrowing lent ETH
      * @param tokenAddress The address of the ERC20 token being checked for collateral eligibility
@@ -181,9 +180,9 @@ contract lending {
         _;
     }
 
-    ////////////////////
-    //// Functions ////
-    ///////////////////
+    ///////////////////////////////
+    //// Functions-- External ////
+    /////////////////////////////
     /**
      * @notice Sets the i_owner and i_EthUsdPriceFeed of the lending contract upon deployment
      * @param _owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
@@ -561,6 +560,9 @@ contract lending {
         emit EthWithdrawl(msg.sender, ethYield);
     }
 
+    //////////////////////////////////
+    //// Functions-- Public View ////
+    ////////////////////////////////
     /**
      * @notice Calculates the amount of ETH yield a lender is entitled to, which is based on three factors:
      *      (1) Fees generated from borrowing activity
