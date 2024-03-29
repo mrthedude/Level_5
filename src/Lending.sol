@@ -78,13 +78,14 @@ contract lending {
     AggregatorV3Interface private immutable i_EthUsdPriceFeed;
     /// @notice Fixed borrow fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
     uint256 public constant BORROW_FEE = 5e16; // 5% fee on the amount of ETH borrowed per borrow() function call
+    /// @notice Variable specifying the number of seconds in a year to avoid extra clutter in the codebase
+    uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // (60sec * 60mins * 24hrs * 365days)
     /// @notice Accounts for the total amount of fees that lenders can claim on a pro-rata basis. Updated with every borrow() function call and ETH claim from lenders
     uint256 public lendersYieldPool;
-    /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
-    IERC20[] public allowedTokens;
-    uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // (60sec * 60mins * 24hrs * 365days)
     /// @notice The total amount of ETH lenders have deposited into the contract
     uint256 totalLentEth;
+    /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
+    IERC20[] public allowedTokens;
 
     /// @notice Tracks the deposit balance of the ERC20 tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
