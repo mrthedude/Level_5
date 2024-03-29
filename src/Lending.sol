@@ -352,12 +352,12 @@ contract lending {
     }
 
     /**
-     * @notice Allows users to repay the ETH they borrowed from the lending contract
+     * @notice Allows borrowers to repay the ETH they borrowed from the lending contract
      * @dev Reverts with the cannotRepayMoreThanTotalUserDebt error if the msg.value is greater than the user's total ETH debt
      * @dev The msg.value must be greater than zero
      * @dev The userBorrowingFees[] mapping is prioritized in the case that the msg.value is <= the user's borrowing fees
-     * @dev Updates the user's borrowedEthAmount[] mapping
-     * @dev Updates the user's userBorrowingFees[] mapping
+     * @dev Updates the borrowedEthAmount[] mapping
+     * @dev Updates the userBorrowingFees[] mapping
      * @dev Emits the Repay event
      */
     function repay() external payable moreThanZero(msg.value) {
@@ -371,9 +371,8 @@ contract lending {
             repaymentAmount = 0;
         }
         if (repaymentAmount >= userBorrowingFees[msg.sender]) {
-            uint256 interestExpense = userBorrowingFees[msg.sender];
+            repaymentAmount -= userBorrowingFees[msg.sender];
             userBorrowingFees[msg.sender] = 0;
-            repaymentAmount -= interestExpense;
         }
         borrowedEthAmount[msg.sender] -= repaymentAmount;
         emit Repay(msg.sender, msg.value, totalUserDebt);
