@@ -602,12 +602,17 @@ contract lending {
     }
 
     /**
-     * @notice Calculates a user's health factor in a specific ERC20 token borrowing market by dividing the amount of tokens the user deposited by their total ETH debt
-     * @param user The address of the user whose health factor is being queried
-     * @param tokenAddress The ERC20 token collateral whose borrowing market is being queried to calculate the user's health factor
-     * @dev Reverts with the cannotCalculateHealthFactor error if the user does not have any borrowing debt
+     * @notice Calculates a borrower's health factor for a specific ERC20 token collateral market
+     * @notice If the borrower's health factor falls below the minimum collateralization ratio for that collateral market, the borrower becomes eligible for liquidation
+     * @param borrower The address of the borrower whose health factor is being queried
+     * @param tokenAddress The ERC20 token collateral whose borrowing market is being queried
+     * @dev Reverts with the cannotCalculateHealthFactor error if the borrower does not have any open debt positions
      */
-    function getUserHealthFactorByToken(address user, IERC20 tokenAddress) public view returns (uint256 healthFactor) {
+    function getUserHealthFactorByToken(address borrower, IERC20 tokenAddress)
+        public
+        view
+        returns (uint256 healthFactor)
+    {
         uint256 totalUserEthDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender];
 
         if (totalUserEthDebt == 0) {
@@ -615,7 +620,7 @@ contract lending {
         }
 
         uint256 totalEthDebtInUSD = priceConverter.getEthConversionRate(totalUserEthDebt, i_EthUsdPriceFeed);
-        healthFactor = depositIndexByToken[user][tokenAddress] * 1e18 / totalEthDebtInUSD * 100;
+        healthFactor = depositIndexByToken[borrower][tokenAddress] * 1e18 / totalEthDebtInUSD * 100;
     }
 
     function getTokenMinimumCollateralizationRatio(IERC20 tokenAddress)
