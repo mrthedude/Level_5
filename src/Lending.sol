@@ -264,7 +264,7 @@ contract lending {
      * @notice Allows users to deposit approved ERC20 tokens into the lending contract
      * @param tokenAddress The ERC20 token that is being deposited into the lending contract
      * @param amount The number of ERC20 tokens being deposited
-     * @dev Only approved tokens may be deposited
+     * @dev Only ERC20 tokens in the allowedTokens[] array may be deposited
      * @dev The amount deposited must be greater than zero
      * @dev Cannot deposit ERC20 tokens whose market has been frozen
      * @dev Updates the depositIndexByToken[] array
