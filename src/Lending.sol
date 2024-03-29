@@ -97,8 +97,6 @@ contract lending {
     mapping(IERC20 token => uint256 collateralFactor) public minimumCollateralizationRatio;
     /// @notice Tracks a market's borrowing status to see if new borrowing positions can be opened against certain ERC20 token collateral
     mapping(IERC20 borrowMarket => bool borrowingFrozen) public frozenBorrowingMarket;
-    /// @notice Tracks users' health factors
-    mapping(address borrower => uint256 healthFactor) public userHealthFactor;
     /// @notice Tracks the individual lenders' ETH deposits
     mapping(address lender => uint256) public lenderLentEthAmount;
     /// @notice Tracks the individual lenders' ETH deposits in a granular way, allowing for timestamp tracking when paired with lenderIndexOfDepositTimestamps
