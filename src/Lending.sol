@@ -65,7 +65,6 @@ contract lending {
     error userIsNotEligibleForLiquidation();
     error entireDebtPositionMustBePaidToBeAbleToLiquidate();
     error cannotCalculateHealthFactor();
-    error withdrawlRequestExceedsPayoutAmount();
     error borrowingMarketHasAlreadyBeenFrozen();
     error borrowingMarketIsCurrentlyActive();
     error cannotWithdrawMoreEthThanLenderIsEntitledTo();
