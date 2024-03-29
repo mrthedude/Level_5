@@ -623,6 +623,12 @@ contract lending {
         healthFactor = depositIndexByToken[borrower][tokenAddress] * 1e18 / totalEthDebtInUSD * 100;
     }
 
+    /**
+     * @notice Returns the minimum collateralization ratio for a approved ERC20 token borrowing market
+     * @notice If a borrower's health factor falls below this ratio in this market, their collateral becomes eligible for liquidation
+     * @param tokenAddress The ERC20 token collateral market whose minimum collateralization ratio is being queried
+     * @dev Only ERC20 tokens in the allowedTokens[] array have borrowing markets with minimum collateralization ratios
+     */
     function getTokenMinimumCollateralizationRatio(IERC20 tokenAddress)
         public
         view
