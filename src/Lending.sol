@@ -84,10 +84,6 @@ contract lending {
     uint256 public lendersYieldPool;
     /// @notice The total amount of ETH lenders have deposited into the contract
     uint256 totalLentEth;
-
-    /// @notice Records leftover ETH yield amounts for lenders that withdraw an amount of ETH less than their acrrued ETH yield
-    uint256 lenderLeftoverEthYield;
-
     /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
     IERC20[] public allowedTokens;
 
