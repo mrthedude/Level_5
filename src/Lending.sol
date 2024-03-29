@@ -225,9 +225,9 @@ contract lending {
      * @param tokenAddress The ERC20 token that is being added to the eligible collateral list
      * @param minimumCollateralRatio The minimum collateralization ratio allowed for open debt positions, falling below this makes the position eligible for liquidation
      * @dev Only the i_owner is able to call this function
-     * @dev Adds the minimumCollateralRatio to the minimumCollaterizationRatio[] array, thus setting the market's borrowing ratio limit
-     * @dev Adds tokenAddress to the allowedTokens[] array
-     * @dev Sets the BorrowingMarketFrozen[tokenAddress] to false, enabling new borrowing positions to be created against this collateral
+     * @dev Updates the minimumCollateralizationRatio mapping for this ERC20 token collateral, setting the market's borrowing ratio limit
+     * @dev Updates the allowedTokens array
+     * @dev Updates the BorrowingMarketFrozen[tokenAddress] to false, allowing new borrowing positions to be created against this collateral
      * @dev Emits the AllowedTokenSet event
      */
     function allowTokenAsCollateral(IERC20 tokenAddress, uint256 minimumCollateralRatio) external onlyOwner {
