@@ -13,8 +13,8 @@
  *
  * Layout of Functions:
  * constructor
- * receive function (if exists)
- * fallback function (if exists)
+ * receive function
+ * fallback function
  * external
  * public
  * internal
@@ -193,8 +193,8 @@ contract lending {
         i_EthUsdPriceFeed = AggregatorV3Interface(priceFeed);
     }
 
-    ///////////////////////////////
-    //// Functions-- External ////
+    //////////////////////////////
+    //// Functions-- receive ////
     /////////////////////////////
     /**
      * @notice Allows the lending contract to receive deposits of Ether
@@ -213,6 +213,9 @@ contract lending {
         emit EthDeposit(msg.sender, msg.value);
     }
 
+    ///////////////////////////////
+    //// Functions-- fallback ////
+    /////////////////////////////
     /**
      * @notice A fallback function for error catching any incompatible function calls to the lending contract
      * @dev Reverts with the unrecognizedFunctionCall error
@@ -221,6 +224,9 @@ contract lending {
         revert unrecognizedFunctionCall();
     }
 
+    ///////////////////////////////
+    //// Functions-- External ////
+    /////////////////////////////
     /**
      * @notice Adds an ERC20 token to the list of eligible collateral that can be deposited to borrow lent ETH against
      * @notice Sets the ERC20 token's minimumCollateralizationRatio (borrowing limits)
