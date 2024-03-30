@@ -82,7 +82,7 @@ contract lending {
     uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // (60sec * 60mins * 24hrs * 365days)
     /// @notice Accounts for the total amount of fees that lenders can claim on a pro-rata basis. Updated with every borrow() function call and ETH claim from lenders
     uint256 public lendersYieldPool;
-    /// @notice The total amount of ETH lenders have deposited into the contract
+    /// @notice The total amount of ETH that lenders have deposited into the contract
     uint256 totalLentEth;
     /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
     IERC20[] public allowedTokens;
