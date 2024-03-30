@@ -87,7 +87,7 @@ contract lending {
     /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
     IERC20[] public allowedTokens;
 
-    /// @notice Tracks the deposit balance of the ERC20 tokens a user has supplied to the contract as borrowing collateral
+    /// @notice Tracks the deposit balances of the ERC20 tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
     /// @notice Tracks the amount of ETH a user has borrowed from the contract
     mapping(address borrower => uint256 amount) public borrowedEthAmount;
