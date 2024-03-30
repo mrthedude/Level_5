@@ -180,9 +180,9 @@ contract lending {
         _;
     }
 
-    ///////////////////////////////
-    //// Functions-- External ////
-    /////////////////////////////
+    //////////////////////////////////
+    //// Functions-- Constructor ////
+    ////////////////////////////////
     /**
      * @notice Sets the i_owner and i_EthUsdPriceFeed of the lending contract upon deployment
      * @param _owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
@@ -193,6 +193,9 @@ contract lending {
         i_EthUsdPriceFeed = AggregatorV3Interface(priceFeed);
     }
 
+    ///////////////////////////////
+    //// Functions-- External ////
+    /////////////////////////////
     /**
      * @notice Allows the lending contract to receive deposits of Ether
      * @dev Updates the ethLenderDepositList mapping
