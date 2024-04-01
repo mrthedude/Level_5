@@ -271,7 +271,7 @@ contract lending {
     }
 
     /**
-     * @notice Allows users to deposit approved ERC20 tokens into the lending contract
+     * @notice Allows users to deposit approved ERC20 tokens into the lending contract, which can then be used as collateral for borrowing lent ETH against
      * @param tokenAddress The ERC20 token that is being deposited into the lending contract
      * @param amount The number of ERC20 tokens being deposited
      * @dev Only ERC20 tokens in the allowedTokens[] array may be deposited
