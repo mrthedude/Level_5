@@ -89,10 +89,12 @@ contract lending {
 
     /// @notice Tracks the deposit balances of the ERC20 tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
-    /// @notice Tracks the amount of ETH a user has borrowed from the contract
-    mapping(address borrower => uint256 amount) public borrowedEthAmount;
-    /// @notice Tracks a user's total borrowing fees which must be paid to the contract in order to withdraw the deposited collateral
-    mapping(address borrower => uint256 userBorrowingFees) public userBorrowingFees;
+    /// @notice Tracks the amount of ETH a user has borrowed in each collateral market
+    mapping(address borrower => mapping(IERC20 tokenAddress => uint256 borrowedEthAmount)) public
+        userBorrowedEthByMarket;
+    /// @notice Tracks the borrowing fees a user has accrued in each collateral market that they have borrowed from
+    mapping(address borrower => mapping(IERC20 tokenAddress => uint256 ethBorrowingFees)) public
+        userBorrowingFeesByMarket;
     /// @notice Tracks the minimum collateralization ratio for approved ERC20 token collateral, below which the borrowing position is eligible for liquidation
     mapping(IERC20 token => uint256 collateralFactor) public minimumCollateralizationRatio;
     /// @notice Tracks a market's borrowing status to see if new borrowing positions can be opened against certain ERC20 token collateral
@@ -113,8 +115,8 @@ contract lending {
     event EthDeposit(address indexed depositer, uint256 indexed amount);
     event BorrowingMarketHasBeenUnfrozen(IERC20 indexed borrowingMarket);
     event AllowedTokenSet(IERC20 indexed tokenAddress, uint256 indexed minimumCollateralizationRatio);
-    event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed totalUserEthDebt);
-    event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed totalUserEthDebt);
+    event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed remainingUserMarketDebt);
+    event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed userMarketEthDebt);
     event Withdraw(address indexed user, IERC20 indexed withdrawnTokenAddress, uint256 indexed amountWithdrawn);
     event ERC20Deposit(address indexed depositer, IERC20 indexed tokenAddress, uint256 indexed amountDeposited);
     event Liquidate(address indexed debtor, IERC20 indexed tokenAddress, uint256 indexed tokenAmountLiquidated);
@@ -125,7 +127,7 @@ contract lending {
     /**
      * @notice Modifier to check if an ERC20 token is eligible to be used as collateral for borrowing lent ETH
      * @param tokenAddress The address of the ERC20 token being checked for collateral eligibility
-     * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), liquidate(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
+     * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), repay(), liquidate(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
      * @dev Reverts with the notEligibleAsCollateral error if the ERC20 token is not in the allowedTokens[] array
      */
     modifier isAllowedToken(IERC20 tokenAddress) {
@@ -292,19 +294,20 @@ contract lending {
     }
 
     /**
-     * @notice Allows users to withdraw deposited ERC20 token collateral if their debt and borrowing fees are 0 (completely paid off)
+     * @notice Allows users to withdraw deposited ERC20 token collateral if their debt and borrowing fees are 0 (completely paid off) for that borrowing market
      * @param tokenAddress Specifies which ERC20 token will be selected for the user to withdraw
      * @param amount The amount of user-deposited ERC20 tokens being withdrawn
      * @dev Only ERC20 tokens in the allowedTokens[] array may be withdrawn
      * @dev The amount to withdraw must be greater than zero
-     * @dev Reverts with the cannotWithdrawCollateralWithOpenDebtPositions error if the user has any borrowing debt or fees
-     * @dev Reverts with the cannotWithdrawMoreCollateralThanWhatWasDeposited error if the amount to be withdrawn exceeds the user's deposit balance
+     * @dev Reverts with the cannotWithdrawCollateralWithOpenDebtPositions error if the user has any borrowing debt or fees in that borrowing market
+     * @dev Reverts with the cannotWithdrawMoreCollateralThanWhatWasDeposited error if the amount to be withdrawn exceeds the user's deposit balance in that market
      * @dev Updates the depositIndexByToken mapping
      * @dev Emits the Withdraw event
      */
     function withdraw(IERC20 tokenAddress, uint256 amount) external moreThanZero(amount) isAllowedToken(tokenAddress) {
-        uint256 totalUserEthDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender];
-        if (totalUserEthDebt > 0) {
+        uint256 borrowerMarketDebt =
+            userBorrowedEthByMarket[msg.sender][tokenAddress] + userBorrowingFeesByMarket[msg.sender][tokenAddress];
+        if (borrowerMarketDebt > 0) {
             revert cannotWithdrawCollateralWithOpenDebtPositions();
         }
         if (depositIndexByToken[msg.sender][tokenAddress] < amount) {
@@ -322,10 +325,11 @@ contract lending {
      * @param tokenCollateral The deposited ERC20 token collateral that the ETH is being borrowed against
      * @dev Only user-deposited ERC20 tokens in the allowedTokens[] array may be borrowed against
      * @dev The amount being borrowed must be greater than zero
+     * @dev Cannot open a new debt position if the borrowing market is frozen
      * @dev Reverts with the notEnoughEthInContract error if the ethBorrowAmount exceeds the amount of ETH held in the contract
      * @dev Reverts with the notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth error if the borrow request will cause the user's health factor to fall below the minimum collateralization ratio for that ERC20 token borrowing market
-     * @dev Updates the ethBorrowAmount mapping
-     * @dev Updates the userBorrowingFees mapping
+     * @dev Updates the userBorrowedEthByMarket mapping
+     * @dev Updates the userBorrowingFeesByMarket mapping
      * @dev Updates the lendersYieldPool variable
      * @dev Emits the Borrow event
      */
@@ -335,22 +339,21 @@ contract lending {
         isAllowedToken(tokenCollateral)
         checkBorrowingMarket(tokenCollateral)
     {
-        uint256 feesIncurredFromCurrentBorrow = ethBorrowAmount * BORROW_FEE;
-        uint256 totalUserEthDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender] + ethBorrowAmount
-            + feesIncurredFromCurrentBorrow;
         if (address(this).balance < ethBorrowAmount) {
             revert notEnoughEthInContract();
         }
+        uint256 feesIncurredFromCurrentBorrow = ethBorrowAmount * BORROW_FEE;
+        uint256 userTotalMarketDebt = userBorrowedEthByMarket[msg.sender][tokenCollateral]
+            + userBorrowingFeesByMarket[msg.sender][tokenCollateral] + ethBorrowAmount + feesIncurredFromCurrentBorrow;
         if (
             depositIndexByToken[msg.sender][tokenCollateral] * 1e18
-                / priceConverter.getEthConversionRate(totalUserEthDebt, i_EthUsdPriceFeed) * 100
+                / priceConverter.getEthConversionRate(userTotalMarketDebt, i_EthUsdPriceFeed) * 100
                 < minimumCollateralizationRatio[tokenCollateral]
         ) {
             revert notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
         }
-
-        borrowedEthAmount[msg.sender] += ethBorrowAmount;
-        userBorrowingFees[msg.sender] += feesIncurredFromCurrentBorrow;
+        userBorrowedEthByMarket[msg.sender][tokenCollateral] += ethBorrowAmount;
+        userBorrowingFeesByMarket[msg.sender][tokenCollateral] += feesIncurredFromCurrentBorrow;
         lendersYieldPool += feesIncurredFromCurrentBorrow;
 
         (bool success,) = msg.sender.call{value: ethBorrowAmount}("");
@@ -358,56 +361,59 @@ contract lending {
             revert transferFailed();
         }
 
-        emit Borrow(msg.sender, ethBorrowAmount, borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender]);
+        emit Borrow(
+            msg.sender,
+            ethBorrowAmount,
+            userBorrowedEthByMarket[msg.sender][tokenCollateral]
+                + userBorrowingFeesByMarket[msg.sender][tokenCollateral]
+        );
     }
 
     /**
-     * @notice Allows borrowers to repay the ETH they borrowed from the lending contract
-     * @dev Reverts with the cannotRepayMoreThanCurrentUserDebt error if the msg.value is greater than the user's total ETH debt
+     * @notice Allows users to repay ETH borrowed from collateral markets in the lending contract
+     * @dev Reverts with the cannotRepayMoreThanCurrentUserDebt error if the msg.value is greater than the user's total ETH debt in that borrowing market
      * @dev The msg.value must be greater than zero
-     * @dev The userBorrowingFees[] mapping is prioritized in the case that the msg.value is <= the user's borrowing fees
-     * @dev Updates the borrowedEthAmount[] mapping
-     * @dev Updates the userBorrowingFees[] mapping
+     * @dev The userBorrowingFeesByMarket[] mapping is prioritized in the case that the msg.value is <= the user's borrowing fees in that market
+     * @dev Updates the userBorrowingFeesByMarket mapping
+     * @dev Updates the userBorrowedEthByMarket mapping
      * @dev Emits the Repay event
      */
-    function repay() external payable moreThanZero(msg.value) {
-        uint256 totalUserDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender];
+    function repay(IERC20 collateralMarket) external payable moreThanZero(msg.value) isAllowedToken(collateralMarket) {
+        uint256 userMarketDebt = userBorrowedEthByMarket[msg.sender][collateralMarket]
+            + userBorrowingFeesByMarket[msg.sender][collateralMarket];
         uint256 repaymentAmount = msg.value;
-        if (totalUserDebt < repaymentAmount) {
+        if (userMarketDebt < repaymentAmount) {
             revert cannotRepayMoreThanCurrentUserDebt();
         }
-        if (repaymentAmount <= userBorrowingFees[msg.sender]) {
-            userBorrowingFees[msg.sender] -= repaymentAmount;
+        if (repaymentAmount <= userBorrowingFeesByMarket[msg.sender][collateralMarket]) {
+            userBorrowingFeesByMarket[msg.sender][collateralMarket] -= repaymentAmount;
             repaymentAmount = 0;
         }
-        if (repaymentAmount > userBorrowingFees[msg.sender]) {
-            repaymentAmount -= userBorrowingFees[msg.sender];
-            userBorrowingFees[msg.sender] = 0;
+        if (repaymentAmount > userBorrowingFeesByMarket[msg.sender][collateralMarket]) {
+            repaymentAmount -= userBorrowingFeesByMarket[msg.sender][collateralMarket];
+            userBorrowingFeesByMarket[msg.sender][collateralMarket] = 0;
         }
-        borrowedEthAmount[msg.sender] -= repaymentAmount;
-        emit Repay(msg.sender, msg.value, totalUserDebt);
+        userBorrowedEthByMarket[msg.sender][collateralMarket] -= repaymentAmount;
+        emit Repay(msg.sender, msg.value, userMarketDebt);
     }
 
     /**
      * @notice Allows for the liquidation (seizure) of borrowers' deposited collateral if the debt position's health factor falls below that market's minimum collateralization ratio
-     * @notice The liquidator must repay the borrower's entire ETH debt in order to take possession of their deposited collateral for that specific market
+     * @notice The liquidator must repay the borrower's entire ETH debt for that specific market in order to take possession of their deposited collateral
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param tokenAddress The ERC20 token collateral being liquidated
      * @dev Only ERC20 tokens in the allowedTokens[] array may be liquidated
-     * @dev Reverts with the exactDebtAmountMustBeRepaid error if the msg.value doesn't match the debtor's exact ETH debt
+     * @dev Reverts with the exactDebtAmountMustBeRepaid error if the msg.value doesn't match the debtor's exact ETH debt for that specific collateral market
      * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not below the minimum collateralization ratio for that borrowing market
      * @dev Updates the depositIndexByToken mapping
-     * @dev Updates the borrowedEthAmount mapping
-     * @dev Updates the userBorrowingFees mapping
+     * @dev Updates the userBorrowedEthByMarket mapping
+     * @dev Updates the userBorrowingFeesByMarket mapping
      * @dev Emits the Liquidate event
      */
-
-    // PROBLEM: A BORROWER COULD HAVE DIFFERENT DEBT AMOUNTS IN DIFFERENT MARKETS AND AFTER A LIQUIDATION EVENT, THEIR ENTIRE ACCOUNTING BALANCES ARE SET TO ZERO
-    // PROBLEM CONT'D: BORROWERS' DEBT IS TOO GENERALIZED AND NEEDS TO BE MORE GRANULAR TO ENABLE MULTIPLE HEALTH FACTORS AND DEBT AMOUNTS
-    // SOLUTION IDEA: CREATE MULTIPLE INDEX MAPPINGS TO BETTER ACCOUNT FOR BORROWERS' DEBT AMOUNTS, SIMILAR TO THE depositIndexByToken MAPPING
     function liquidate(address debtor, IERC20 tokenAddress) external payable isAllowedToken(tokenAddress) {
-        uint256 totalUserDebt = borrowedEthAmount[debtor] + userBorrowingFees[debtor];
-        if (msg.value != totalUserDebt) {
+        uint256 userMarketDebt =
+            userBorrowedEthByMarket[msg.sender][tokenAddress] + userBorrowingFeesByMarket[msg.sender][tokenAddress];
+        if (msg.value != userMarketDebt) {
             revert exactDebtAmountMustBeRepaid();
         }
         if (getUserHealthFactorByToken(debtor, tokenAddress) >= minimumCollateralizationRatio[tokenAddress]) {
@@ -415,8 +421,8 @@ contract lending {
         }
         uint256 collateralAmount = depositIndexByToken[debtor][tokenAddress];
         depositIndexByToken[debtor][tokenAddress] = 0;
-        borrowedEthAmount[debtor] = 0;
-        userBorrowingFees[debtor] = 0;
+        userBorrowedEthByMarket[msg.sender][tokenAddress] = 0;
+        userBorrowingFeesByMarket[msg.sender][tokenAddress] = 0;
         tokenAddress.safeTransferFrom(address(this), msg.sender, collateralAmount);
         emit Liquidate(debtor, tokenAddress, collateralAmount);
     }
@@ -621,7 +627,7 @@ contract lending {
 
     /**
      * @notice Calculates a borrower's health factor for a specific ERC20 token collateral market
-     * @notice If the borrower's health factor falls below the minimum collateralization ratio for that collateral market, the borrower becomes eligible for liquidation
+     * @notice If the borrower's health factor falls below the minimum collateralization ratio for that market, the borrower's deposited collateral becomes eligible for liquidation
      * @param borrower The address of the borrower whose health factor is being queried
      * @param tokenAddress The ERC20 token collateral whose borrowing market is being queried
      * @dev Reverts with the cannotCalculateHealthFactor error if the borrower does not have any open debt positions
@@ -631,19 +637,20 @@ contract lending {
         view
         returns (uint256 healthFactor)
     {
-        uint256 totalUserEthDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender];
+        uint256 userMarketDebt =
+            userBorrowedEthByMarket[msg.sender][tokenAddress] + userBorrowingFeesByMarket[msg.sender][tokenAddress];
 
-        if (totalUserEthDebt == 0) {
+        if (userMarketDebt == 0) {
             revert cannotCalculateHealthFactor();
         }
 
-        uint256 totalEthDebtInUSD = priceConverter.getEthConversionRate(totalUserEthDebt, i_EthUsdPriceFeed);
-        healthFactor = depositIndexByToken[borrower][tokenAddress] * 1e18 / totalEthDebtInUSD * 100;
+        uint256 totalEthDebtInUSDByMarket = priceConverter.getEthConversionRate(userMarketDebt, i_EthUsdPriceFeed);
+        healthFactor = depositIndexByToken[borrower][tokenAddress] * 1e18 / totalEthDebtInUSDByMarket * 100;
     }
 
     /**
-     * @notice Returns the minimum collateralization ratio for a approved ERC20 token borrowing market
-     * @notice If a borrower's health factor falls below this ratio in this market, their collateral becomes eligible for liquidation
+     * @notice Returns the minimum collateralization ratio for an approved ERC20 token borrowing market
+     * @notice If a borrower has a debt position whose health factor falls below its market's minimum ratio, their collateral becomes eligible for liquidation (seizure)
      * @param tokenAddress The ERC20 token collateral market whose minimum collateralization ratio is being queried
      * @dev Only ERC20 tokens in the allowedTokens[] array have borrowing markets with minimum collateralization ratios
      */
