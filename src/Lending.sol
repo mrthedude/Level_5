@@ -57,7 +57,7 @@ contract lending {
     error notAuthorizedToCallThisFunction();
     error cannotWithdrawCollateralWithOpenDebtPositions();
     error cannotRemoveFromCollateralListWithOpenDebtPositions();
-    error cannotRepayMoreThanTotalUserDebt();
+    error cannotRepayMoreThanCurrentUserDebt();
     error transferFailed();
     error notEnoughEthInContract();
     error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
@@ -363,7 +363,7 @@ contract lending {
 
     /**
      * @notice Allows borrowers to repay the ETH they borrowed from the lending contract
-     * @dev Reverts with the cannotRepayMoreThanTotalUserDebt error if the msg.value is greater than the user's total ETH debt
+     * @dev Reverts with the cannotRepayMoreThanCurrentUserDebt error if the msg.value is greater than the user's total ETH debt
      * @dev The msg.value must be greater than zero
      * @dev The userBorrowingFees[] mapping is prioritized in the case that the msg.value is <= the user's borrowing fees
      * @dev Updates the borrowedEthAmount[] mapping
@@ -374,13 +374,13 @@ contract lending {
         uint256 totalUserDebt = borrowedEthAmount[msg.sender] + userBorrowingFees[msg.sender];
         uint256 repaymentAmount = msg.value;
         if (totalUserDebt < repaymentAmount) {
-            revert cannotRepayMoreThanTotalUserDebt();
+            revert cannotRepayMoreThanCurrentUserDebt();
         }
         if (repaymentAmount <= userBorrowingFees[msg.sender]) {
             userBorrowingFees[msg.sender] -= repaymentAmount;
             repaymentAmount = 0;
         }
-        if (repaymentAmount >= userBorrowingFees[msg.sender]) {
+        if (repaymentAmount > userBorrowingFees[msg.sender]) {
             repaymentAmount -= userBorrowingFees[msg.sender];
             userBorrowingFees[msg.sender] = 0;
         }
