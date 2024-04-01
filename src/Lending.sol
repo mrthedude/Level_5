@@ -326,7 +326,7 @@ contract lending {
      * @dev Reverts with the notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth error if the borrow request will cause the user's health factor to fall below the minimum collateralization ratio for that ERC20 token borrowing market
      * @dev Updates the ethBorrowAmount mapping
      * @dev Updates the userBorrowingFees mapping
-     * @dev Updates the lendersYieldPool
+     * @dev Updates the lendersYieldPool variable
      * @dev Emits the Borrow event
      */
     function borrow(IERC20 tokenCollateral, uint256 ethBorrowAmount)
