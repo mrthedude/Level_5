@@ -393,8 +393,8 @@ contract lending {
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param tokenAddress The ERC20 token collateral being liquidated
      * @dev Only ERC20 tokens in the allowedTokens[] array may be liquidated
-     * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not below the minimum collateralization ratio for that borrowing market
      * @dev Reverts with the exactDebtAmountMustBeRepaid error if the msg.value doesn't match the debtor's exact ETH debt
+     * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not below the minimum collateralization ratio for that borrowing market
      * @dev Updates the depositIndexByToken mapping
      * @dev Updates the userBorrowingFees mapping
      * @dev Emits the Liquidate event
@@ -402,11 +402,11 @@ contract lending {
      */
     function liquidate(address debtor, IERC20 tokenAddress) external payable isAllowedToken(tokenAddress) {
         uint256 totalUserDebt = borrowedEthAmount[debtor] + userBorrowingFees[debtor];
-        if (getUserHealthFactorByToken(debtor, tokenAddress) > minimumCollateralizationRatio[tokenAddress]) {
-            revert userIsNotEligibleForLiquidation();
-        }
         if (msg.value != totalUserDebt) {
             revert exactDebtAmountMustBeRepaid();
+        }
+        if (getUserHealthFactorByToken(debtor, tokenAddress) >= minimumCollateralizationRatio[tokenAddress]) {
+            revert userIsNotEligibleForLiquidation();
         }
         uint256 collateralAmount = depositIndexByToken[debtor][tokenAddress];
         depositIndexByToken[debtor][tokenAddress] = 0;
