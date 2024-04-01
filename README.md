@@ -10,12 +10,12 @@
 
   **priceConverter.sol**: Uses the provided Chainlink ETH/USD price feed to convert any amount of ETH to its current dollar value
 
-- **HelperConfig.s.sol**: Enables for modular deployments in regards to the contract/token owner and the price feed being used, allowing for mock-price feed generation for testing.
+- **HelperConfig.s.sol**:
 
-- **AdvancedLendingDeployment.s.sol**: Modular deployment contract that deploys `AdvancedLending.sol` and `ERC20_token.sol` with constructor parameters that are programmatically determinded in `HelperConfig.s.sol`, allowing for local testing as well as production deployments.
+- **Deploy_Lending.s.sol**: Modular deployment contract that deploys `Lending.sol` and `ERC20_token.sol` with constructor parameters that are programmatically determinded in `HelperConfig.s.sol`, allowing for local testing as well as production deployments.
 
-- **InteractionsTest.t.sol**: Verifies the functionality of the deployment contract `AdvancedLendingDeployment.s.sol`
+- **InteractionsTest.t.sol**:
 
-  **AdvancedLendingTest.t.sol**: Unit tests verifying the functionality of `AdvancedLending.sol` and `ERC20_token.sol`
+  **Lending_Test.t.sol**:
 
-  **MockV3Aggregator.t.sol**: Simulates the `AggregatorV3Interface` contract to allow for price feed testing in a development environment
+  **MockV3Aggregator.t.sol**:
