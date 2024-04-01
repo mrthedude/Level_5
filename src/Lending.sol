@@ -179,7 +179,6 @@ contract lending {
         }
         _;
     }
-
     //////////////////////////////////
     //// Functions-- Constructor ////
     ////////////////////////////////
@@ -188,6 +187,7 @@ contract lending {
      * @param _owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
      * @param priceFeed Sets the Chainlink ETH/USD price feed that will be used to determine the LTV of open debt positions
      */
+
     constructor(address _owner, address priceFeed) {
         i_owner = _owner;
         i_EthUsdPriceFeed = AggregatorV3Interface(priceFeed);
@@ -229,7 +229,7 @@ contract lending {
     /////////////////////////////
     /**
      * @notice Adds an ERC20 token to the list of eligible collateral that can be deposited to borrow lent ETH against
-     * @notice Sets the ERC20 token's minimumCollateralizationRatio (borrowing limits)
+     * @notice Sets the ERC20 token's minimum collateralization ratio (borrowing limits)
      * @param tokenAddress The ERC20 token that is being added to the eligible collateral list
      * @param minimumCollateralRatio The minimum collateralization ratio allowed for open debt positions, falling below this makes the position eligible for liquidation
      * @dev Only the i_owner is able to call this function
@@ -249,7 +249,7 @@ contract lending {
      * @notice Removes an ERC20 token from the eligible collateral list that can be used to borrow lent ETH against
      * @param tokenAddress The ERC20 token that is being removed from the eligible collateral list
      * @dev Only the i_owner is able to call this function
-     * @dev Reverts with the cannotRemoveFromCollateralListWithOpenDebtPositions error if the collateral being removed has open debt positions
+     * @dev Reverts with the cannotRemoveFromCollateralListWithOpenDebtPositions error if the collateral market being removed has tokens deposited into the contract
      * @dev Updates the BorrowingMarketFrozen[tokenAddress] to true, prohibiting the creation of new borrowing positions against this collateral
      * @dev Emits the RemovedTokenSet event
      */
@@ -257,13 +257,15 @@ contract lending {
         if (tokenAddress.balanceOf(address(this)) != 0) {
             revert cannotRemoveFromCollateralListWithOpenDebtPositions();
         }
-        IERC20[] memory newTokenAllowList;
+        uint256 arrayIndex;
         for (uint256 i = 0; i < allowedTokens.length; i++) {
-            if (allowedTokens[i] != tokenAddress) {
-                newTokenAllowList[i] = allowedTokens[i];
+            if (allowedTokens[i] == tokenAddress) {
+                arrayIndex = i;
+                break;
             }
         }
-        allowedTokens = newTokenAllowList;
+        allowedTokens[arrayIndex] = allowedTokens[allowedTokens.length - 1];
+        allowedTokens.pop();
         frozenBorrowingMarket[tokenAddress] = true;
         emit RemovedTokenSet(tokenAddress);
     }
