@@ -1,66 +1,21 @@
-## Foundry
+## Lending: LEVEL 5
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+**This is a lending and borrowing contract where users can lend ETH to the contract and claim in-kind yield from borrowers who deposit approved ERC20 tokens as collateral. The contract has basic liquidation functionality, can freeze and unfreeze borrowing markets, and integrates a Chainlink ETH/USD price feed for updated LTV ratios on open debt positions. All ERC20 collateral tokens are treated as having a fixed price of $1/token for simplicity**
 
-Foundry consists of:
+## Contract Descriptions:
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- **ERC20_token.sol**: An ERC20 token that is deployed in tandem with the `Lending.sol` contract and serves as an initial accepted collateral for the contract to lend deposited ETH against
 
-## Documentation
+- **Lending.sol**: A lending and borrowing contract with liquidation mechanics, an integrated Chainlink ETH/USD price feed to provide real-time LTV's for users. This contract uses approved ERC20 tokens as collateral to borrow deposited ETH against with a market-specific minimum collateralization ratios governing the borrowing limits. ETH lenders are compensated through in-kind yield derived from borrowing activity, their share of the total amount of ETH lent to the contract, and the length of time that their ETH has been deposited into the contract for.
 
-https://book.getfoundry.sh/
+  **priceConverter.sol**: Uses the provided Chainlink ETH/USD price feed to convert any amount of ETH to its current dollar value
 
-## Usage
+- **HelperConfig.s.sol**: Enables for modular deployments in regards to the contract/token owner and the price feed being used, allowing for mock-price feed generation for testing.
 
-### Build
+- **AdvancedLendingDeployment.s.sol**: Modular deployment contract that deploys `AdvancedLending.sol` and `ERC20_token.sol` with constructor parameters that are programmatically determinded in `HelperConfig.s.sol`, allowing for local testing as well as production deployments.
 
-```shell
-$ forge build
-```
+- **InteractionsTest.t.sol**: Verifies the functionality of the deployment contract `AdvancedLendingDeployment.s.sol`
 
-### Test
+  **AdvancedLendingTest.t.sol**: Unit tests verifying the functionality of `AdvancedLending.sol` and `ERC20_token.sol`
 
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+  **MockV3Aggregator.t.sol**: Simulates the `AggregatorV3Interface` contract to allow for price feed testing in a development environment
