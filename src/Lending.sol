@@ -389,17 +389,22 @@ contract lending {
     }
 
     /**
-     * @notice Allows users to liquidate deposited collateral of other users whose loan(s) have fallen below the collateral market's minimum collateralization ratio
+     * @notice Allows for the liquidation (seizure) of borrowers' deposited collateral if the debt position's health factor falls below that market's minimum collateralization ratio
+     * @notice The liquidator must repay the borrower's entire ETH debt in order to take possession of their deposited collateral for that specific market
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param tokenAddress The ERC20 token collateral being liquidated
      * @dev Only ERC20 tokens in the allowedTokens[] array may be liquidated
      * @dev Reverts with the exactDebtAmountMustBeRepaid error if the msg.value doesn't match the debtor's exact ETH debt
      * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not below the minimum collateralization ratio for that borrowing market
      * @dev Updates the depositIndexByToken mapping
+     * @dev Updates the borrowedEthAmount mapping
      * @dev Updates the userBorrowingFees mapping
      * @dev Emits the Liquidate event
-     *
      */
+
+    // PROBLEM: A BORROWER COULD HAVE DIFFERENT DEBT AMOUNTS IN DIFFERENT MARKETS AND AFTER A LIQUIDATION EVENT, THEIR ENTIRE ACCOUNTING BALANCES ARE SET TO ZERO
+    // PROBLEM CONT'D: BORROWERS' DEBT IS TOO GENERALIZED AND NEEDS TO BE MORE GRANULAR TO ENABLE MULTIPLE HEALTH FACTORS AND DEBT AMOUNTS
+    // SOLUTION IDEA: CREATE MULTIPLE INDEX MAPPINGS TO BETTER ACCOUNT FOR BORROWERS' DEBT AMOUNTS, SIMILAR TO THE depositIndexByToken MAPPING
     function liquidate(address debtor, IERC20 tokenAddress) external payable isAllowedToken(tokenAddress) {
         uint256 totalUserDebt = borrowedEthAmount[debtor] + userBorrowingFees[debtor];
         if (msg.value != totalUserDebt) {
