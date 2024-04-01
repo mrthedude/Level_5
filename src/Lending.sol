@@ -477,8 +477,9 @@ contract lending {
      * @dev Emits the EthWithdrawl event
      */
     function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) {
+        uint256 lenderEthYield = calculateLenderEthYield(msg.sender);
         uint256 withdrawAmount = amountOfEth;
-        uint256 maximumLenderEthAllocation = calculateLenderEthYield(msg.sender) + lenderLentEthAmount[msg.sender];
+        uint256 maximumLenderEthAllocation = lenderEthYield + lenderLentEthAmount[msg.sender];
 
         if (amountOfEth > maximumLenderEthAllocation) {
             revert cannotWithdrawMoreEthThanLenderIsEntitledTo();
@@ -488,12 +489,12 @@ contract lending {
         }
 
         //// When withdrawing an amount less than the lender's ETH yield ////
-        if (amountOfEth < calculateLenderEthYield(msg.sender)) {
+        if (amountOfEth < lenderEthYield) {
             lendersYieldPool -= withdrawAmount;
 
             // To prevent forfeiting leftover yield, the lender's remaining yield is added to their claimable lent ETH amount
             // and accounted for as a new deposit in the lender's deposit list
-            uint256 remainingLenderYield = calculateLenderEthYield(msg.sender) - withdrawAmount;
+            uint256 remainingLenderYield = lenderEthYield - withdrawAmount;
             lenderLentEthAmount[msg.sender] += remainingLenderYield;
             ethLenderDepositList[msg.sender].push(remainingLenderYield);
 
@@ -509,7 +510,7 @@ contract lending {
         }
 
         //// When withdrawing an amount equal to the lender's ETH yield ////
-        if (amountOfEth == calculateLenderEthYield(msg.sender)) {
+        if (amountOfEth == lenderEthYield) {
             lendersYieldPool -= amountOfEth;
 
             // The timestamps for ETH deposits are set to the current block-time so that the lender's claimable yield is reset to zero
@@ -524,9 +525,9 @@ contract lending {
         }
 
         //// When withdrawing an amount greater than the lender's ETH yield ////
-        if (amountOfEth > calculateLenderEthYield(msg.sender)) {
-            lendersYieldPool -= calculateLenderEthYield(msg.sender);
-            withdrawAmount -= calculateLenderEthYield(msg.sender);
+        if (amountOfEth > lenderEthYield) {
+            lendersYieldPool -= lenderEthYield;
+            withdrawAmount -= lenderEthYield;
             lenderLentEthAmount[msg.sender] -= withdrawAmount;
 
             // The timestamps for deposits are set to zero so that the lender can't claim yield off of expired timestamps
