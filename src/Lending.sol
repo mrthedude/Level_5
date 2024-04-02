@@ -641,7 +641,7 @@ contract lending {
 
     /**
      * @notice Calculates a borrower's health factor for a specific ERC20 token collateral market
-     * @notice If the borrower's health factor falls below the minimum collateralization ratio for that market, the borrower's deposited collateral becomes eligible for liquidation
+     * @notice If the borrower's health factor falls below that market's minimum collateralization ratio, the borrower's collateral becomes eligible for liquidation
      * @param borrower The address of the borrower whose health factor is being queried
      * @param tokenAddress The ERC20 token collateral whose borrowing market is being queried
      * @dev Reverts with the cannotCalculateHealthFactor error if the borrower does not have any open debt positions
