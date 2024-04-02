@@ -186,12 +186,12 @@ contract lending {
     ////////////////////////////////
     /**
      * @notice Sets the i_owner and i_ethUsdPriceFeed of the lending contract upon deployment
-     * @param _owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
-     * @param priceFeed Sets the Chainlink ETH/USD price feed that will be used to determine the LTV of open debt positions
+     * @param owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
+     * @param priceFeed Sets the Chainlink ETH/USD price feed that will be used to determine the LTVs of open debt positions
      */
 
-    constructor(address _owner, address priceFeed) {
-        i_owner = _owner;
+    constructor(address owner, address priceFeed) {
+        i_owner = owner;
         i_ethUsdPriceFeed = AggregatorV3Interface(priceFeed);
     }
 
