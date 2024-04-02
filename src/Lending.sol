@@ -57,7 +57,7 @@ contract lending {
     error notAuthorizedToCallThisFunction();
     error cannotWithdrawCollateralWithOpenDebtPositions();
     error cannotRemoveFromCollateralListWithOpenDebtPositions();
-    error cannotRepayMoreThanCurrentUserDebt();
+    error cannotRepayMoreThanUserMarketDebt();
     error transferFailed();
     error notEnoughEthInContract();
     error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
@@ -371,7 +371,7 @@ contract lending {
 
     /**
      * @notice Allows users to repay ETH borrowed from collateral markets in the lending contract
-     * @dev Reverts with the cannotRepayMoreThanCurrentUserDebt error if the msg.value is greater than the user's total ETH debt in that borrowing market
+     * @dev Reverts with the cannotRepayMoreThanUserMarketDebt error if the msg.value is greater than the user's total ETH debt in that borrowing market
      * @dev The msg.value must be greater than zero
      * @dev The userBorrowingFeesByMarket[] mapping is prioritized in the case that the msg.value is <= the user's borrowing fees in that market
      * @dev Updates the userBorrowingFeesByMarket mapping
@@ -383,7 +383,7 @@ contract lending {
             + userBorrowingFeesByMarket[msg.sender][collateralMarket];
         uint256 repaymentAmount = msg.value;
         if (userMarketDebt < repaymentAmount) {
-            revert cannotRepayMoreThanCurrentUserDebt();
+            revert cannotRepayMoreThanUserMarketDebt();
         }
         if (repaymentAmount <= userBorrowingFeesByMarket[msg.sender][collateralMarket]) {
             userBorrowingFeesByMarket[msg.sender][collateralMarket] -= repaymentAmount;
