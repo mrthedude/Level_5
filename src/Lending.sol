@@ -471,6 +471,7 @@ contract lending {
      * @notice Allows ETH lenders to withdraw their lent ETH and/or their ETH yield
      * @param amountOfEth The amount of ETH the lender is withdrawing
      * @dev A lender's ETH yield is based on borrowing activity (fees), the lender's share of total lent ETH, and the amount of time the lender's ETH has been lent for
+     * @dev The amount of ETH being withdrawn must be greater than zero
      * @dev Reverts with the cannotWithdrawMoreEthThanLenderIsEntitledTo error if the lender tries to withdraw more than their lent ETH and ETH yield combined
      * @dev Reverts with the notEnoughEthInContract error if the lender tries to withdraw more ETH than what is currently held in the contract
      * @dev The function is organized into three main logic sections separated by if the amount of ETH being withdrawn is:
@@ -564,7 +565,9 @@ contract lending {
     }
 
     /**
-     * @notice Allows ETH lenders to withdraw their entire ETH yield, accrued from borrowing activity
+     * @notice Allows ETH lenders to withdraw their entire ETH yield
+     * @dev A lender's ETH yield is based on borrowing activity (fees), the lender's share of total lent ETH, and the amount of time the lender's ETH has been lent for
+     * @dev The amount of ETH being withdrawn must be greater than zero
      * @dev Reverts with the notEnoughEthInContract error if the lender's ETH yield is greater than the amount of ETH currently in the contract
      * @dev Updates the lendersYieldPool variable
      * @dev Updates the lenderIndexOfDepositTimestamps mapping
