@@ -76,7 +76,7 @@ contract lending {
     address public immutable i_owner;
     /// @dev Chainlink ETH/USD price feed
     AggregatorV3Interface private immutable i_ethUsdPriceFeed;
-    /// @notice Fixed borrow fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
+    /// @notice Fixed borrowing fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
     uint256 public constant BORROW_FEE = 5e16; // 5% fee on the amount of ETH borrowed per borrow() function call
     /// @notice Variable specifying the number of seconds in a year to avoid extra clutter in the codebase
     uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // (60sec * 60mins * 24hrs * 365days)
