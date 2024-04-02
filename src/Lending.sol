@@ -28,6 +28,7 @@ pragma solidity ^0.8.19;
 /////////////////
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {priceConverter} from "./priceConverter.sol";
 import {AggregatorV3Interface} from
     "lib/chainlink-brownie-contracts/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
@@ -46,8 +47,9 @@ using SafeERC20 for IERC20;
  * @notice This lending and borrowing contract allows users to lend ETH and earn yield from borrowers taking collateralized loans with approved ERC20 tokens
  * @dev Uses a Chainlink ETH/USD pricefeed oracle to update LTVs on outstanding borrowing positions
  * @dev Incorporates a fixed borrowing fee of 5% the amount of ETH borrowed and considers the value of each collateralized ERC20 token to be $1 per token for simplicity
+ * @dev Uses ReentrancyGuard, SafeERC20, IERC20 contracts from OpenZepplin to mitigate contract attack surface
  */
-contract lending {
+contract lending is ReentrancyGuard {
     /////////////////
     //// Errors ////
     ////////////////
@@ -276,6 +278,7 @@ contract lending {
      * @notice Allows users to deposit approved ERC20 tokens into the lending contract, which can then be used as collateral for borrowing lent ETH against
      * @param tokenAddress The ERC20 token that is being deposited into the lending contract
      * @param amount The number of ERC20 tokens being deposited
+     * @dev Reentrancy guard is active on this function
      * @dev Only ERC20 tokens in the allowedTokens[] array may be deposited
      * @dev The amount deposited must be greater than zero
      * @dev Cannot deposit ERC20 tokens whose market has been frozen
@@ -284,6 +287,7 @@ contract lending {
      */
     function deposit(IERC20 tokenAddress, uint256 amount)
         external
+        nonReentrant
         isAllowedToken(tokenAddress)
         moreThanZero(amount)
         checkBorrowingMarket(tokenAddress)
@@ -299,12 +303,18 @@ contract lending {
      * @param amount The amount of user-deposited ERC20 tokens being withdrawn
      * @dev Only ERC20 tokens in the allowedTokens[] array may be withdrawn
      * @dev The amount to withdraw must be greater than zero
+     * @dev Reentrancy guard is active on this function
      * @dev Reverts with the cannotWithdrawCollateralWithOpenDebtPositions error if the user has any borrowing debt or fees in that borrowing market
      * @dev Reverts with the cannotWithdrawMoreCollateralThanWhatWasDeposited error if the amount to be withdrawn exceeds the user's deposit balance in that market
      * @dev Updates the depositIndexByToken mapping
      * @dev Emits the Withdraw event
      */
-    function withdraw(IERC20 tokenAddress, uint256 amount) external moreThanZero(amount) isAllowedToken(tokenAddress) {
+    function withdraw(IERC20 tokenAddress, uint256 amount)
+        external
+        moreThanZero(amount)
+        isAllowedToken(tokenAddress)
+        nonReentrant
+    {
         uint256 borrowerMarketDebt =
             userBorrowedEthByMarket[msg.sender][tokenAddress] + userBorrowingFeesByMarket[msg.sender][tokenAddress];
         if (borrowerMarketDebt > 0) {
@@ -323,6 +333,7 @@ contract lending {
      * @notice Every successful borrow() function call will incure a borrowing fee of 5% the amount borrowed, which is then added to the lenders' claimable yield pool
      * @param ethBorrowAmount The amount of ETH the user specifies to borrow
      * @param tokenCollateral The deposited ERC20 token collateral that the ETH is being borrowed against
+     * @dev Reentrancy guard is active on this function
      * @dev Only user-deposited ERC20 tokens in the allowedTokens[] array may be borrowed against
      * @dev The amount being borrowed must be greater than zero
      * @dev Cannot open a new debt position if the borrowing market is frozen
@@ -338,6 +349,7 @@ contract lending {
         moreThanZero(ethBorrowAmount)
         isAllowedToken(tokenCollateral)
         checkBorrowingMarket(tokenCollateral)
+        nonReentrant
     {
         if (address(this).balance < ethBorrowAmount) {
             revert notEnoughEthInContract();
@@ -472,6 +484,7 @@ contract lending {
      * @param amountOfEth The amount of ETH the lender is withdrawing
      * @dev A lender's ETH yield is based on borrowing activity (fees), the lender's share of total lent ETH, and the amount of time the lender's ETH has been lent for
      * @dev The amount of ETH being withdrawn must be greater than zero
+     * @dev Reentrancy guard is active on this function
      * @dev Reverts with the cannotWithdrawMoreEthThanLenderIsEntitledTo error if the lender tries to withdraw more than their lent ETH and ETH yield combined
      * @dev Reverts with the notEnoughEthInContract error if the lender tries to withdraw more ETH than what is currently held in the contract
      * @dev The function is organized into three main logic sections separated by if the amount of ETH being withdrawn is:
@@ -484,7 +497,7 @@ contract lending {
      * @dev Updates the lenderIndexOfDepositTimestamps[] mapping
      * @dev Emits the EthWithdrawl event
      */
-    function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) {
+    function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) nonReentrant {
         uint256 lenderEthYield = calculateLenderEthYield(msg.sender);
         uint256 withdrawAmount = amountOfEth;
         uint256 maximumLenderEthAllocation = lenderEthYield + lenderLentEthAmount[msg.sender];
@@ -567,13 +580,14 @@ contract lending {
     /**
      * @notice Allows ETH lenders to withdraw their entire ETH yield
      * @dev A lender's ETH yield is based on borrowing activity (fees), the lender's share of total lent ETH, and the amount of time the lender's ETH has been lent for
+     * @dev Reentrancy guard is active on this function
      * @dev Reverts with the inputMustBeGreaterThanZero error if the lender has no accrued ETH yield
      * @dev Reverts with the notEnoughEthInContract error if the lender's ETH yield is greater than the amount of ETH currently in the contract
      * @dev Updates the lendersYieldPool variable
      * @dev Updates the lenderIndexOfDepositTimestamps mapping
      * @dev Emits the EthWitdrawl event
      */
-    function withdrawEthYield() external {
+    function withdrawEthYield() external nonReentrant {
         uint256 ethYield = calculateLenderEthYield(msg.sender);
         if (ethYield <= 0) {
             revert inputMustBeGreaterThanZero();
