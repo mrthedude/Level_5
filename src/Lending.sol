@@ -423,6 +423,11 @@ contract lending is ReentrancyGuard {
      * @dev Updates the userBorrowingFeesByMarket mapping
      * @dev Emits the Liquidate event
      */
+
+    ////////////////// TO DO: UPDATE THE LIQUIDATION FUNCTION TO PARTIALLY LIQUIDATE COLLATERAL AND CLAIM A 20% YIELD //////////////////
+    // minimumCollateralizationRatio => MCR
+    // IDEA: MCR - 30% < current_LTV < MCR ---> Liquidate to reset the LTV to MCR + 50% and the liquidator earns a 20% premium from the liquidation
+
     function liquidate(address debtor, IERC20 tokenAddress)
         external
         payable
