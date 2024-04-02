@@ -75,7 +75,7 @@ contract lending {
     /// @notice Address with special function privileges
     address public immutable i_owner;
     /// @dev Chainlink ETH/USD price feed
-    AggregatorV3Interface private immutable i_EthUsdPriceFeed;
+    AggregatorV3Interface private immutable i_ethUsdPriceFeed;
     /// @notice Fixed borrow fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
     uint256 public constant BORROW_FEE = 5e16; // 5% fee on the amount of ETH borrowed per borrow() function call
     /// @notice Variable specifying the number of seconds in a year to avoid extra clutter in the codebase
@@ -185,14 +185,14 @@ contract lending {
     //// Functions-- Constructor ////
     ////////////////////////////////
     /**
-     * @notice Sets the i_owner and i_EthUsdPriceFeed of the lending contract upon deployment
+     * @notice Sets the i_owner and i_ethUsdPriceFeed of the lending contract upon deployment
      * @param _owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
      * @param priceFeed Sets the Chainlink ETH/USD price feed that will be used to determine the LTV of open debt positions
      */
 
     constructor(address _owner, address priceFeed) {
         i_owner = _owner;
-        i_EthUsdPriceFeed = AggregatorV3Interface(priceFeed);
+        i_ethUsdPriceFeed = AggregatorV3Interface(priceFeed);
     }
 
     //////////////////////////////
@@ -347,7 +347,7 @@ contract lending {
             + userBorrowingFeesByMarket[msg.sender][tokenCollateral] + ethBorrowAmount + feesIncurredFromCurrentBorrow;
         if (
             depositIndexByToken[msg.sender][tokenCollateral] * 1e18
-                / priceConverter.getEthConversionRate(userTotalMarketDebt, i_EthUsdPriceFeed) * 100
+                / priceConverter.getEthConversionRate(userTotalMarketDebt, i_ethUsdPriceFeed) * 100
                 < minimumCollateralizationRatio[tokenCollateral]
         ) {
             revert notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
@@ -645,7 +645,7 @@ contract lending {
             revert cannotCalculateHealthFactor();
         }
 
-        uint256 totalEthDebtInUSDByMarket = priceConverter.getEthConversionRate(userMarketDebt, i_EthUsdPriceFeed);
+        uint256 totalEthDebtInUSDByMarket = priceConverter.getEthConversionRate(userMarketDebt, i_ethUsdPriceFeed);
         healthFactor = depositIndexByToken[borrower][tokenAddress] * 1e18 / totalEthDebtInUSDByMarket * 100;
     }
 
