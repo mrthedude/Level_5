@@ -146,7 +146,7 @@ contract lending {
     /**
      * @notice Modifier to ensure the function call parameter is more than zero
      * @param amount The input amount being checked in the function call
-     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), liquidate(), withdrawLentEth(), withdrawEthYield(), calculateLenderEthYield()
+     * @dev Used in the following functions: deposit(), withdraw(), borrow(), repay(), liquidate(), withdrawLentEth(), calculateLenderEthYield()
      * @dev Reverts with the inputMustBeGreaterThanZero error if the function parameter is less than or equal to zero
      */
     modifier moreThanZero(uint256 amount) {
@@ -567,14 +567,17 @@ contract lending {
     /**
      * @notice Allows ETH lenders to withdraw their entire ETH yield
      * @dev A lender's ETH yield is based on borrowing activity (fees), the lender's share of total lent ETH, and the amount of time the lender's ETH has been lent for
-     * @dev The amount of ETH being withdrawn must be greater than zero
+     * @dev Reverts with the inputMustBeGreaterThanZero error if the lender has no accrued ETH yield
      * @dev Reverts with the notEnoughEthInContract error if the lender's ETH yield is greater than the amount of ETH currently in the contract
      * @dev Updates the lendersYieldPool variable
      * @dev Updates the lenderIndexOfDepositTimestamps mapping
      * @dev Emits the EthWitdrawl event
      */
-    function withdrawEthYield() external moreThanZero(calculateLenderEthYield(msg.sender)) {
+    function withdrawEthYield() external {
         uint256 ethYield = calculateLenderEthYield(msg.sender);
+        if (ethYield <= 0) {
+            revert inputMustBeGreaterThanZero();
+        }
 
         if (ethYield > address(this).balance) {
             revert notEnoughEthInContract();
