@@ -548,7 +548,7 @@ contract lending {
                 ethLenderDepositList[msg.sender].pop;
             }
 
-            // If the lender has any ETH still in the contract, it is added onto their new deposit list and the timestamp recorded with the current block-time
+            // If the lender has any ETH still in the contract, it is added onto their new deposit list and its deposit timestamp is recorded with the current block-time
             if (lenderLentEthAmount[msg.sender] > 0) {
                 ethLenderDepositList[msg.sender].push(lenderLentEthAmount[msg.sender]);
                 uint256 endOfArray = ethLenderDepositList[msg.sender].length - 1;
