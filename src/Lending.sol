@@ -434,7 +434,7 @@ contract lending {
     }
 
     /**
-     * @notice Allows the i_owner to stop (freeze) an ERC20 token collateral market from having new borrowing positions opened
+     * @notice Allows the i_owner to close (freeze) an ERC20 token borrowing market, preventing the creation of new borrowing positions against this collateral
      * @param market The ERC20 token borrowing market being frozen
      * @dev Only the i_owner is able to call this function
      * @dev Only ERC20 tokens in the allowedTokens[] array can be selected for a market freeze
