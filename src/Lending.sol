@@ -600,20 +600,20 @@ contract lending {
     //// Functions-- Public View ////
     ////////////////////////////////
     /**
-     * @notice Calculates the amount of ETH yield a lender is entitled to, which is based on three factors:
-     *      (1) Fees generated from borrowing activity
-     *      (2) The lender's share of the total lent ETH pool, not including borrowing fees
-     *      (3) The length of time (in seconds) the lender has had their ETH deposited into the contract
+     * @notice Calculates a lender's claimable ETH yield, which is based on three factors:
+     *      (1) Fees generated from borrowing activity (lendersYieldPool)
+     *      (2) The lender's share of total lent ETH (does not include borrowing fees)
+     *      (3) The length of time (in seconds) the lender has had their ETH deposited into the contract for
      * @param lender The address of the ETH lender
-     * @dev Reverts with the inputMustBeGreaterThanZero error if there is no ETH currently in the contract
+     * @dev Reverts with the inputMustBeGreaterThanZero error if the contract hasn't had any ETH lent to it
      */
     function calculateLenderEthYield(address lender)
         public
         view
-        moreThanZero(address(this).balance)
-        returns (uint256 currentLenderEthYield)
+        moreThanZero(totalLentEth)
+        returns (uint256 currentClaimableEthYield)
     {
-        // The total time (in seconds) all the lender's ETH deposits have been in the contract for
+        // The total time (in seconds) the lender's ETH deposits have been in the contract for
         uint256 totalTimeEthLent;
         for (uint256 i = 0; i < ethLenderDepositList[lender].length; i++) {
             // Omits any expired timestamps from being added to the totalTimeEthLent variable
@@ -623,20 +623,20 @@ contract lending {
             }
         }
 
-        // The percentage of a lender's ETH yield that is currently claimable based on a yearly timeframe
+        // The lender's total deposit time determines what percentage of their ETH yield is currently claimable (based on a yearly timeframe)
         uint256 percentageOfEthYieldClaimable = totalTimeEthLent / SECONDS_IN_A_YEAR;
 
-        // The percentage of the total ETH lent to the contract that is from this lender (does not include borrowing fees)
+        // The lender's share of lent ETH to the contract determines their claimable percentage of the yield pool (all else equal)
         uint256 lenderEthShareOfPool = lenderLentEthAmount[lender] / totalLentEth;
 
-        // The current yearly ETH yield the lender is generating from their deposits
+        // The specific yield amount the lender is entitled to every year assuming all else equal
         uint256 yearlyLenderEthYield = lenderEthShareOfPool * lendersYieldPool;
 
         // The current amount of ETH yield the lender can claim based off of:
-        //      (1) The length of time the lender's ETH deposits have been in the contract
+        //      (1) The length of time the lender's ETH deposits have been in the contract for
         //      (2) What percentage of the contract's lent ETH is from the lender
-        //      (3) The amount of borrowing fees accrued
-        currentLenderEthYield = yearlyLenderEthYield * percentageOfEthYieldClaimable;
+        //      (3) The amount of borrowing fees accrued (lendersYieldPool)
+        currentClaimableEthYield = yearlyLenderEthYield * percentageOfEthYieldClaimable;
     }
 
     /**
