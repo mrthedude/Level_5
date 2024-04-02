@@ -4,9 +4,9 @@
 
 ## Contract Descriptions:
 
-- **ERC20_token.sol**: An ERC20 token that is deployed in tandem with the `Lending.sol` contract and serves as an initial accepted collateral for the contract to lend deposited ETH against
+- **ERC20_token.sol**: An ERC20 token that serves as an initial accepted collateral for the `Lending.sol` contract to lend deposited ETH against
 
-- **Lending.sol**: A lending and borrowing contract with liquidation mechanics, an integrated Chainlink ETH/USD price feed to provide real-time LTV's for users. This contract uses approved ERC20 tokens as collateral to borrow deposited ETH against with a market-specific minimum collateralization ratios governing the borrowing limits. ETH lenders are compensated through in-kind yield derived from borrowing activity, their share of the total amount of ETH lent to the contract, and the length of time that their ETH has been deposited into the contract for.
+- **Lending.sol**: A lending and borrowing contract with basic liquidation mechanics, lending yield, and an integrated Chainlink ETH/USD price feed to provide real-time LTV's for users. This contract uses approved ERC20 tokens as collateral to borrow deposited ETH against with a market-specific minimum collateralization ratios governing the borrowing limits. ETH lenders are compensated through in-kind yield derived from borrowing activity, their share of the total amount of ETH lent to the contract, and the length of time that their ETH has been deposited into the contract for.
 
   **priceConverter.sol**: Uses the provided Chainlink ETH/USD price feed to convert any amount of ETH to its current dollar value
 
