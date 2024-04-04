@@ -59,12 +59,13 @@ contract lending is ReentrancyGuard {
     error notAuthorizedToCallThisFunction();
     error cannotWithdrawCollateralWithOpenDebtPositions();
     error cannotRemoveFromCollateralListWithOpenDebtPositions();
-    error cannotRepayMoreThanUserMarketDebt();
+    error cannotRepayMoreThanuserEthMarketDebt();
     error transferFailed();
     error notEnoughEthInContract();
     error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
     error cannotWithdrawMoreCollateralThanWhatWasDeposited();
     error userIsNotEligibleForLiquidation();
+    error userIsNotEligibleForPartialLiquidation();
     error exactDebtAmountMustBeRepaid();
     error correctDebtAmountMustBeRepaid();
     error cannotCalculateHealthFactor();
@@ -81,8 +82,8 @@ contract lending is ReentrancyGuard {
     AggregatorV3Interface private immutable i_ethUsdPriceFeed;
     /// @notice Fixed borrowing fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
     uint256 public constant BORROW_FEE = 5e16; // 5% fee on the amount of ETH borrowed per borrow() function call
-    /// @notice Used to calculate when a borrower's LTV is eligible for full liquidation --> borrower position < minimum collateralization ratio - 30%
-    uint256 public constant FULL_LIQUIDATION_THRESHOLD = 3e17; // 30% below the MCR
+    /// @notice Used to calculate when a borrower's LTV is eligible for full liquidation --> position's health factor <= minimum collateralization ratio - 30%
+    uint256 public constant FULL_LIQUIDATION_THRESHOLD = 3e17; // Market's minimum collateralization ratio - 30%
     /// @notice Variable specifying the number of seconds in a year to avoid extra clutter in the codebase
     uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // (60sec * 60mins * 24hrs * 365days)
     /// @notice Accounts for the total amount of fees that lenders can claim on a pro-rata basis. Updated with every borrow() function call and ETH claim from lenders
@@ -120,11 +121,14 @@ contract lending is ReentrancyGuard {
     event EthDeposit(address indexed depositer, uint256 indexed amount);
     event BorrowingMarketHasBeenUnfrozen(IERC20 indexed borrowingMarket);
     event AllowedTokenSet(IERC20 indexed tokenAddress, uint256 indexed minimumCollateralizationRatio);
-    event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed remainingUserMarketDebt);
+    event Repay(address indexed user, uint256 indexed amountRepaid, uint256 indexed remaininguserEthMarketDebt);
     event Borrow(address indexed borrower, uint256 indexed ethAmountBorrowed, uint256 indexed userMarketEthDebt);
     event Withdraw(address indexed user, IERC20 indexed withdrawnTokenAddress, uint256 indexed amountWithdrawn);
     event ERC20Deposit(address indexed depositer, IERC20 indexed tokenAddress, uint256 indexed amountDeposited);
     event CompleteLiquidation(
+        address indexed debtor, IERC20 indexed tokenAddress, uint256 indexed tokenAmountLiquidated
+    );
+    event PartialLiquidation(
         address indexed debtor, IERC20 indexed tokenAddress, uint256 indexed tokenAmountLiquidated
     );
 
@@ -388,7 +392,7 @@ contract lending is ReentrancyGuard {
 
     /**
      * @notice Allows users to repay ETH borrowed from collateral markets in the lending contract
-     * @dev Reverts with the cannotRepayMoreThanUserMarketDebt error if the msg.value is greater than the user's total ETH debt in that borrowing market
+     * @dev Reverts with the cannotRepayMoreThanuserEthMarketDebt error if the msg.value is greater than the user's total ETH debt in that borrowing market
      * @dev The msg.value must be greater than zero
      * @dev The userBorrowingFeesByMarket[] mapping is prioritized in the case that the msg.value is <= the user's borrowing fees in that market
      * @dev Updates the userBorrowingFeesByMarket mapping
@@ -396,11 +400,11 @@ contract lending is ReentrancyGuard {
      * @dev Emits the Repay event
      */
     function repay(IERC20 collateralMarket) external payable moreThanZero(msg.value) isAllowedToken(collateralMarket) {
-        uint256 userMarketDebt = userBorrowedEthByMarket[msg.sender][collateralMarket]
+        uint256 userEthMarketDebt = userBorrowedEthByMarket[msg.sender][collateralMarket]
             + userBorrowingFeesByMarket[msg.sender][collateralMarket];
         uint256 repaymentAmount = msg.value;
-        if (userMarketDebt < repaymentAmount) {
-            revert cannotRepayMoreThanUserMarketDebt();
+        if (userEthMarketDebt < repaymentAmount) {
+            revert cannotRepayMoreThanuserEthMarketDebt();
         }
         if (repaymentAmount <= userBorrowingFeesByMarket[msg.sender][collateralMarket]) {
             userBorrowingFeesByMarket[msg.sender][collateralMarket] -= repaymentAmount;
@@ -411,12 +415,12 @@ contract lending is ReentrancyGuard {
             userBorrowingFeesByMarket[msg.sender][collateralMarket] = 0;
         }
         userBorrowedEthByMarket[msg.sender][collateralMarket] -= repaymentAmount;
-        emit Repay(msg.sender, msg.value, userMarketDebt);
+        emit Repay(msg.sender, msg.value, userEthMarketDebt);
     }
 
     /**
      * @notice Allows for the complete liquidation (seizure) of borrowers' deposited collateral if the debt position's health factor falls significantly below that market's minimum collateralization ratio (MCR)
-     * @notice The borrower's LTV must be at least 30% below the MCR to become eligible for full liquidation (i.e. borrower's health factor is 120% and the MCR is 150%)
+     * @notice The position's LTV must be at least 30% below the MCR to become eligible for full liquidation (i.e. borrower's health factor is 120% and the MCR is 150%)
      * @notice The liquidator must repay the borrower's entire ETH debt for that specific market in order to take possession of their deposited collateral
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param tokenAddress The ERC20 token collateral being liquidated
@@ -429,26 +433,20 @@ contract lending is ReentrancyGuard {
      * @dev Updates the userBorrowingFeesByMarket mapping
      * @dev Emits the CompleteLiquidation event
      */
-
-    /**
-     * Parameters: If current_LTV <= MCR - 30%
-     * (1) Liquidator pays off entire debt
-     * (2) Liquidator claims all collateral (the premimum being the overcollateralization of the position ~20%)
-     */
     function fullLiquidation(address debtor, IERC20 tokenAddress)
         external
         payable
         isAllowedToken(tokenAddress)
         moreThanZero(msg.value)
     {
-        uint256 userMarketDebt =
+        uint256 userEthMarketDebt =
             userBorrowedEthByMarket[debtor][tokenAddress] + userBorrowingFeesByMarket[debtor][tokenAddress];
-        if (msg.value != userMarketDebt) {
+        if (msg.value != userEthMarketDebt) {
             revert exactDebtAmountMustBeRepaid();
         }
-        uint256 borrowerHealthFactor = getUserHealthFactorByToken(debtor, tokenAddress);
+        uint256 borrowerHealthFactor = getUserHealthFactorByMarket(debtor, tokenAddress);
         uint256 marketMinimumRatio = minimumCollateralizationRatio[tokenAddress];
-        // Full liquidation eligibility is when borrower_LTV <= MCR - 30%
+        // Full liquidation eligibility is when the borrower position's LTV is <= MCR - 30%
         uint256 inRangeOfFullLiquidation = marketMinimumRatio - (FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio);
         // Checks to see if the borrower's current LTV is low enough to have their position fully liquidated (seized)
         if (borrowerHealthFactor > inRangeOfFullLiquidation) {
@@ -464,29 +462,21 @@ contract lending is ReentrancyGuard {
 
     /**
      * @notice Allows for the partial liquidation (seizure) of borrowers' deposited collateral if the debt position's health factor falls slightly below that market's minimum collateralization ratio (MCR)
-     * @notice The borrower's LTV must be less than 30% below the MRC to be eligible for partial liquidation (i.e. borrower's health factor is 121% and the MCR is 150%)
-     * @notice The liquidator must partially repay the borrower's ETH debt for that specific market in order to take possession of a percentage of their deposited collateral
-     * @notice The liquidator must repay enough of the borrower's debt as to reset their debt position's LTV to the market's MCR + 200%
+     * @notice The positions's LTV must be less than 30% below the MRC to be eligible for partial liquidation (i.e. borrower's health factor is 121% and the MCR is 150%)
+     * @notice The liquidator must partially repay the borrower's ETH debt for that specific market in order to claim a percentage of their deposited collateral
+     * @notice The liquidator must repay enough of the borrower's debt as to reset their position's LTV to the market's MCR + 100%
      * @notice After repaying this amount of debt, the liquidator claims the same dollar amount of collateral paid down + 5% as payment
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param tokenAddress The ERC20 token collateral being liquidated
      * @dev Only ERC20 tokens in the allowedTokens[] array may be liquidated
      * @dev The msg.value must be greater than zero
-     * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not below the MCR for that borrowing market
-     * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is at or lower than the market's MCR - 30% (i.e. borrower's health factor is 120% and the MCR is 150%)
-     * @dev Reverts with the correctDebtAmountMustBeRepaid error if the msg.value doesn't match the amount necessary to reset the borrower's LTV to the market's MCR + 200%
-     * @dev Updates the depositIndexByToken mapping
+     * @dev Reverts with the userIsNotEligibleForPartialLiquidation error if the debtor's health factor is not below the MCR for that borrowing market OR
+     * if the debtor's health factor is at or lower than the market's MCR - 30% (i.e. borrower's health factor is 120% and the MCR is 150%)
+     * @dev Reverts with the correctDebtAmountMustBeRepaid error if the msg.value doesn't match the amount necessary to reset the borrower's LTV to the market's MCR + 100%
      * @dev Updates the userBorrowedEthByMarket mapping
      * @dev Updates the userBorrowingFeesByMarket mapping
-     * @dev Emits the CompleteLiquidation event
-     */
-
-    /**
-     * Parameters: If MCR - 30% < current_LTV < MCR:
-     * (1) Liquidator pays off debt to set LTV to MCR * 200%
-     * (2) Liquidator claims collateral amount equal to debt paid off + 5%
-     * (3) This sets the borrower's remaining position to about MCR + 30%
-     *
+     * @dev Updates the depositIndexByToken mapping
+     * @dev Emits the PartialLiquidation event
      */
     function partialLiquidation(address debtor, IERC20 tokenAddress)
         external
@@ -494,36 +484,46 @@ contract lending is ReentrancyGuard {
         isAllowedToken(tokenAddress)
         moreThanZero(msg.value)
     {
-        uint256 userMarketDebt =
-            userBorrowedEthByMarket[debtor][tokenAddress] + userBorrowingFeesByMarket[debtor][tokenAddress];
-
-        uint256 borrowerHealthFactor = getUserHealthFactorByToken(debtor, tokenAddress);
-
+        uint256 borrowerHealthFactor = getUserHealthFactorByMarket(debtor, tokenAddress);
         uint256 marketMinimumRatio = minimumCollateralizationRatio[tokenAddress];
 
+        // If the borrower's health factor is at or below this number then they aren't eligible for partial liquidation, only full liquidation (see above function)
         uint256 inRangeOfFullLiquidation = marketMinimumRatio - (FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio);
 
-        uint256 resetCollateralizationRatio = marketMinimumRatio * 200e18; // 200%
+        // The amount of ETH debt the liquidator must pay in order to claim a portion of the borrower's collateral
+        uint256 amountOfDebtToPayOffInEth = getPartialLiquidationSpecs(debtor, tokenAddress);
 
-        // uint256 resetHealthFactor = userMarketDebt / x = resetCollateralizationRatio
-        // $15 collateral / $11 debt = HF (below MCR)
-        // $15 / resetCollateralizationRatio = amountOfDebtToRepay
-        uint256 amountOfDebtToRepay = userMarketDebt / resetCollateralizationRatio;
-        uint256 liquidatorPayment = amountOfDebtToRepay + (amountOfDebtToRepay * 0.05e18);
+        // Same as amountOfDebtToPayOffInEth but denominated in USD to calculate the amount of collateral the liquidator claims as payment (each token is valued at $1)
+        uint256 amountOfDebtToPayOffInUsd =
+            priceConverter.getEthConversionRate(amountOfDebtToPayOffInEth, i_ethUsdPriceFeed);
 
-        if (msg.value != amountOfDebtToRepay) {
-            revert exactDebtAmountMustBeRepaid();
+        // The amount of collateral the liquidator claims, calculated by the USD amount they spent paying off the borrower's debt plus a 5% bonus as payment
+        uint256 liquidatorPayment = amountOfDebtToPayOffInUsd * 0.05e18; // 5% payment for the liquidator's service
+
+        if (msg.value != amountOfDebtToPayOffInEth) {
+            revert correctDebtAmountMustBeRepaid();
         }
 
+        // If the position's health factor is not < the MCR OR if the position's health factor is < the MCR - 30%, then the position cannot be partially liquidated
         if (borrowerHealthFactor >= marketMinimumRatio || borrowerHealthFactor < inRangeOfFullLiquidation) {
-            revert userIsNotEligibleForLiquidation();
+            revert userIsNotEligibleForPartialLiquidation();
         }
-        uint256 collateralAmount = depositIndexByToken[debtor][tokenAddress];
-        depositIndexByToken[debtor][tokenAddress] = 0;
-        userBorrowedEthByMarket[msg.sender][tokenAddress] = 0;
-        userBorrowingFeesByMarket[msg.sender][tokenAddress] = 0;
+
+        // The borrowing fees are prioritized in the balances accounting if the debtor's borrowing fees are <= the amount of ETH debt being paid off
+        if (userBorrowingFeesByMarket[debtor][tokenAddress] <= amountOfDebtToPayOffInEth) {
+            amountOfDebtToPayOffInEth -= userBorrowingFeesByMarket[debtor][tokenAddress];
+            userBorrowingFeesByMarket[debtor][tokenAddress] = 0;
+        }
+
+        if (userBorrowingFeesByMarket[debtor][tokenAddress] > amountOfDebtToPayOffInEth) {
+            userBorrowingFeesByMarket[debtor][tokenAddress] -= amountOfDebtToPayOffInEth;
+            amountOfDebtToPayOffInEth = 0;
+        }
+
+        userBorrowedEthByMarket[debtor][tokenAddress] -= amountOfDebtToPayOffInEth;
+        depositIndexByToken[debtor][tokenAddress] -= liquidatorPayment;
         tokenAddress.safeTransferFrom(address(this), msg.sender, liquidatorPayment);
-        emit CompleteLiquidation(debtor, tokenAddress, liquidatorPayment);
+        emit PartialLiquidation(debtor, tokenAddress, liquidatorPayment);
     }
 
     /**
@@ -741,19 +741,19 @@ contract lending is ReentrancyGuard {
      * @param tokenAddress The ERC20 token collateral whose borrowing market is being queried
      * @dev Reverts with the cannotCalculateHealthFactor error if the borrower does not have any open debt positions
      */
-    function getUserHealthFactorByToken(address borrower, IERC20 tokenAddress)
+    function getUserHealthFactorByMarket(address borrower, IERC20 tokenAddress)
         public
         view
         returns (uint256 healthFactor)
     {
-        uint256 userMarketDebt =
+        uint256 userEthMarketDebt =
             userBorrowedEthByMarket[msg.sender][tokenAddress] + userBorrowingFeesByMarket[msg.sender][tokenAddress];
 
-        if (userMarketDebt == 0) {
+        if (userEthMarketDebt == 0) {
             revert cannotCalculateHealthFactor();
         }
 
-        uint256 totalEthDebtInUSDByMarket = priceConverter.getEthConversionRate(userMarketDebt, i_ethUsdPriceFeed);
+        uint256 totalEthDebtInUSDByMarket = priceConverter.getEthConversionRate(userEthMarketDebt, i_ethUsdPriceFeed);
         healthFactor = depositIndexByToken[borrower][tokenAddress] * 1e18 / totalEthDebtInUSDByMarket * 100;
     }
 
@@ -770,5 +770,61 @@ contract lending is ReentrancyGuard {
         returns (uint256 _minimumCollateralizationRatio)
     {
         _minimumCollateralizationRatio = minimumCollateralizationRatio[tokenAddress];
+    }
+
+    /**
+     * @notice Calculates and returns the amount of ETH needed to partially liquidate a borrowing position whose health factor is less than its market's MCR
+     * @param debtor The address of the borrower whose debt position is being queried
+     * @param tokenAddress The ERC20 token borrowing market with the potentially underwater borrowing position
+     * @dev Reverts with the userIsNotEligibleForPartialLiquidation error if the position's health factor is not < the market's MCR OR it is <= the market's MCR - 30%
+     */
+    function getPartialLiquidationSpecs(address debtor, IERC20 tokenAddress)
+        public
+        view
+        returns (uint256 amountOfDebtToPayOffInEth)
+    {
+        // Total borrower ETH debt in market
+        uint256 userEthMarketDebt =
+            userBorrowedEthByMarket[debtor][tokenAddress] + userBorrowingFeesByMarket[debtor][tokenAddress];
+
+        uint256 borrowerHealthFactor = getUserHealthFactorByMarket(debtor, tokenAddress);
+
+        // The amount of token collateral the borrower has deposited into this market (each token is valued at $1)
+        uint256 userDepositedCollateral = depositIndexByToken[debtor][tokenAddress];
+
+        // If the borrowing position's health factor is below this number, it is eligible for some form of liquidation (partial or full depending on how far below it is)
+        uint256 marketMinimumRatio = minimumCollateralizationRatio[tokenAddress];
+
+        uint256 inRangeOfFullLiquidation = marketMinimumRatio - (FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio);
+
+        // If the position's health factor is not less than the MCR OR if the position's health factor is less than the MCR - 30%, then the position cannot be partially liquidated
+        if (borrowerHealthFactor >= marketMinimumRatio || borrowerHealthFactor < inRangeOfFullLiquidation) {
+            revert userIsNotEligibleForPartialLiquidation();
+        }
+        // The collateralization level that the liquidator must reset the borrower's position to in order to then claim a portion of their collateral
+        uint256 idealCollateralizationRatio = marketMinimumRatio * 2e18; // MCR + 100%
+
+        // The amount of debt in USD the borrowing position should have to set its health factor to the idealCollateralizationRatio
+        uint256 idealDebtAmountInDollars = userDepositedCollateral * 1e18 / idealCollateralizationRatio * 100;
+
+        // Coverts the idealDebtAmountInDollars to ETH as the denominator
+        uint256 idealDebtAmountInEth = idealDebtAmountInDollars * 1e18 / priceConverter.getEthPrice(i_ethUsdPriceFeed);
+
+        // The amount of ETH debt the liquidator has to pay to set the borrowing positions health factor to the idealCollateralizationRatio
+        return amountOfDebtToPayOffInEth = userEthMarketDebt - idealDebtAmountInEth;
+    }
+
+    /**
+     * @notice Calculates a borrower's total ETH debt for a specific collateral market
+     * @param debtor The address of the borrower whose ETH debt is being queried
+     * @param tokenAddress The ERC20 token collateral market where the borrower has an open debt position
+     */
+    function getBorrowerMarketEthDebt(address debtor, IERC20 tokenAddress)
+        public
+        view
+        returns (uint256 borrowerEthDebt)
+    {
+        return borrowerEthDebt =
+            userBorrowedEthByMarket[debtor][tokenAddress] + userBorrowingFeesByMarket[debtor][tokenAddress];
     }
 }
