@@ -106,7 +106,7 @@ contract lending is ReentrancyGuard {
     /// @notice Tracks a market's borrowing status to see if new borrowing positions can be opened against certain ERC20 token collateral
     mapping(IERC20 borrowMarket => bool borrowingFrozen) public frozenBorrowingMarket;
     /// @notice Tracks the individual lenders' ETH deposits
-    mapping(address lender => uint256) public lenderLentEthAmount;
+    mapping(address lender => uint256 amount) public lenderLentEthAmount;
     /// @notice Tracks the individual lenders' ETH deposits in a granular way, allowing for timestamp tracking when paired with lenderIndexOfDepositTimestamps
     mapping(address lender => uint256[] lenderDeposits) public ethLenderDepositList;
     /// @notice Tracks when lenders made each one of their ETH deposits
