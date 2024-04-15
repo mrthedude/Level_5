@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Script} from "forge-std/Script.sol";
+import {Test} from "lib/forge-std/src/Test.sol";
 import {token} from "../src/ERC20_token.sol";
 import {lending} from "../src/Lending.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
