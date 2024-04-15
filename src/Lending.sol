@@ -70,6 +70,7 @@ contract lending is ReentrancyGuard {
     error correctDebtAmountMustBeRepaid();
     error cannotCalculateHealthFactor();
     error borrowingMarketHasAlreadyBeenFrozen();
+    error borrowingMarketIsFrozen();
     error borrowingMarketIsCurrentlyActive();
     error cannotWithdrawMoreEthThanLenderIsEntitledTo();
 
@@ -184,11 +185,11 @@ contract lending is ReentrancyGuard {
      * @notice Regulates the opening of new borrowing positions against certain ERC20 token collateral by checking if the market is frozen or unfrozen
      * @param borrowingMarket The ERC20 token borrowing market whose status is being checked to see if it is open or closed to the creation of new borrowing positions
      * @dev Used in the following functions: deposit(), borrow()
-     * @dev Reverts with the borrowingMarketHasAlreadyBeenFrozen error if the market has already been frozen (closed)
+     * @dev Reverts with the borrowingMarketIsFrozen() error if the market has already been frozen (closed)
      */
     modifier checkBorrowingMarket(IERC20 borrowingMarket) {
         if (frozenBorrowingMarket[borrowingMarket] == true) {
-            revert borrowingMarketHasAlreadyBeenFrozen();
+            revert borrowingMarketIsFrozen();
         }
         _;
     }
