@@ -82,7 +82,7 @@ contract lending is ReentrancyGuard {
     /// @dev Chainlink ETH/USD price feed
     AggregatorV3Interface private immutable i_ethUsdPriceFeed;
     /// @notice Fixed borrowing fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
-    uint256 public constant BORROW_FEE = 5e16; // 5% fee on the amount of ETH borrowed per borrow() function call
+    uint256 public constant BORROW_FEE = 0.05e18; // 5% fee on the amount of ETH borrowed per borrow() function call
     /// @notice Used to calculate when a borrower's LTV is eligible for full liquidation --> position's health factor <= minimum collateralization ratio - 30%
     uint256 public constant FULL_LIQUIDATION_THRESHOLD = 3e17; // Market's minimum collateralization ratio - 30%
     /// @notice Variable specifying the number of seconds in a year to avoid extra clutter in the codebase
@@ -358,7 +358,7 @@ contract lending is ReentrancyGuard {
         if (address(this).balance < ethBorrowAmount) {
             revert notEnoughEthInContract();
         }
-        uint256 feesIncurredFromCurrentBorrow = ethBorrowAmount * BORROW_FEE;
+        uint256 feesIncurredFromCurrentBorrow = ethBorrowAmount * BORROW_FEE / 1e18;
         uint256 userTotalMarketDebt = userBorrowedEthByMarket[msg.sender][tokenCollateral]
             + userBorrowingFeesByMarket[msg.sender][tokenCollateral] + ethBorrowAmount + feesIncurredFromCurrentBorrow;
         if (
