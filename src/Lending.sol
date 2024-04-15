@@ -311,7 +311,6 @@ contract lending is ReentrancyGuard {
      * @notice Allows users to withdraw deposited ERC20 token collateral if their debt and borrowing fees are 0 (completely paid off) for that borrowing market
      * @param tokenAddress Specifies which ERC20 token will be selected for the user to withdraw
      * @param amount The amount of user-deposited ERC20 tokens being withdrawn
-     * @dev Only ERC20 tokens in the allowedTokens[] array may be withdrawn
      * @dev The amount to withdraw must be greater than zero
      * @dev Reentrancy guard is active on this function
      * @dev Reverts with the cannotWithdrawCollateralWithOpenDebtPositions error if the user has any borrowing debt or fees in that borrowing market
@@ -319,12 +318,7 @@ contract lending is ReentrancyGuard {
      * @dev Updates the depositIndexByToken mapping
      * @dev Emits the Withdraw event
      */
-    function withdraw(IERC20 tokenAddress, uint256 amount)
-        external
-        moreThanZero(amount)
-        isAllowedToken(tokenAddress)
-        nonReentrant
-    {
+    function withdraw(IERC20 tokenAddress, uint256 amount) external moreThanZero(amount) nonReentrant {
         uint256 borrowerMarketDebt =
             userBorrowedEthByMarket[msg.sender][tokenAddress] + userBorrowingFeesByMarket[msg.sender][tokenAddress];
         if (borrowerMarketDebt > 0) {
