@@ -6,7 +6,7 @@ import {token} from "../src/ERC20_token.sol";
 import {lending} from "../src/Lending.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 
-contract lendingDeployer is Script, HelperConfig {
+contract lendingDeployer is HelperConfig {
     function run() public returns (lending, token) {
         HelperConfig helperConfig = new HelperConfig();
         address owner = helperConfig.getOwnerAddress();
