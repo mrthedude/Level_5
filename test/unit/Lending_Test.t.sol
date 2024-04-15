@@ -129,4 +129,26 @@ contract Lending_Test is Test, lendingDeployer {
     }
 
     ///////////// Testing withdraw() /////////////
+    function test_reverWhen_WithdrawAmountIsZero() public {
+        vm.startPrank(contractOwner);
+        myToken.approve(address(lendingContract), 100);
+        lendingContract.allowTokenAsCollateral(myToken, 150e18);
+        lendingContract.deposit(myToken, 100);
+        vm.expectRevert(lending.inputMustBeGreaterThanZero.selector);
+        lendingContract.withdraw(myToken, 0);
+        vm.stopPrank();
+    }
+
+    function test_revertWhen_WithdrawCalledWithAnOpenDebtPosition() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 150e18);
+        myToken.approve(address(lendingContract), 100e18);
+        (bool success,) = address(lendingContract).call{value: 1 ether}("");
+        require(success, "transfer failed");
+        lendingContract.deposit(myToken, 100e18);
+        lendingContract.borrow(myToken, 0.00001 ether);
+        vm.expectRevert(lending.cannotWithdrawCollateralWithOpenDebtPositions.selector);
+        lendingContract.withdraw(myToken, 1e18);
+        vm.stopPrank();
+    }
 }
