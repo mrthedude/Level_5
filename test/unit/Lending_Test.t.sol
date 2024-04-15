@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "lib/forge-std/src/Test.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {lendingDeployer} from "../../script/Deploy_Lending.s.sol";
 import {lending} from "../../src/Lending.sol";
