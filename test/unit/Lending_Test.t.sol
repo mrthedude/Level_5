@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.0;
 
 import {Test, console} from "forge-std/Test.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
@@ -7,7 +7,7 @@ import {lendingDeployer} from "../../script/Deploy_Lending.s.sol";
 import {lending} from "../../src/Lending.sol";
 import {token} from "../../src/ERC20_token.sol";
 
-contract InteractionsTest is Test, lendingDeployer {
+contract Lending_Test is Test, lendingDeployer {
     lending public lendingContract;
     token public myToken;
     HelperConfig public helperConfig;
