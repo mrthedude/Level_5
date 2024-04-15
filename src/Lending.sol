@@ -89,7 +89,7 @@ contract lending is ReentrancyGuard {
     /// @notice Accounts for the total amount of fees that lenders can claim on a pro-rata basis. Updated with every borrow() function call and ETH claim from lenders
     uint256 public lendersYieldPool;
     /// @notice The total amount of ETH that lenders have deposited into the contract
-    uint256 totalLentEth;
+    uint256 public totalLentEth;
     /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
     IERC20[] public allowedTokens;
 
