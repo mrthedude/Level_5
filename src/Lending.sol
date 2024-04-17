@@ -328,6 +328,7 @@ contract lending is ReentrancyGuard {
             revert cannotWithdrawMoreCollateralThanWhatWasDeposited();
         }
         depositIndexByToken[msg.sender][tokenAddress] -= amount;
+        tokenAddress.approve(address(this), amount);
         tokenAddress.safeTransferFrom(address(this), msg.sender, amount);
         emit Withdraw(msg.sender, tokenAddress, amount);
     }
