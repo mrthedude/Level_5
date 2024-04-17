@@ -403,12 +403,14 @@ contract lending is ReentrancyGuard {
             revert cannotRepayMoreThanuserEthMarketDebt();
         }
         if (repaymentAmount <= userBorrowingFeesByMarket[msg.sender][collateralMarket]) {
-            userBorrowingFeesByMarket[msg.sender][collateralMarket] -= repaymentAmount;
-            repaymentAmount = 0;
+            userEthMarketDebt -= repaymentAmount; // tracks the user's market debt for the Repay event
+            userBorrowingFeesByMarket[msg.sender][collateralMarket] -= repaymentAmount; // updates the accounting for the users's borrowing fees
+            repaymentAmount = 0; // zero out the repaymentAmount to correctly track the amount subtracted
         }
         if (repaymentAmount > userBorrowingFeesByMarket[msg.sender][collateralMarket]) {
-            repaymentAmount -= userBorrowingFeesByMarket[msg.sender][collateralMarket];
-            userBorrowingFeesByMarket[msg.sender][collateralMarket] = 0;
+            userEthMarketDebt -= repaymentAmount; // tracks the user's market debt for the Repay event
+            repaymentAmount -= userBorrowingFeesByMarket[msg.sender][collateralMarket]; // subtracts the borrowing fees from the repaymentAmount
+            userBorrowingFeesByMarket[msg.sender][collateralMarket] = 0; // zero out the borrowing fees to correctly track the amount subtracted
         }
         userBorrowedEthByMarket[msg.sender][collateralMarket] -= repaymentAmount;
         emit Repay(msg.sender, msg.value, userEthMarketDebt);
