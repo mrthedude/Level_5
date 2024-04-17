@@ -64,7 +64,7 @@ contract lending is ReentrancyGuard {
     error notEnoughEthInContract();
     error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
     error cannotWithdrawMoreCollateralThanWhatWasDeposited();
-    error userIsNotEligibleForLiquidation();
+    error userIsNotEligibleForCompleteLiquidation();
     error userIsNotEligibleForPartialLiquidation();
     error exactDebtAmountMustBeRepaid();
     error correctDebtAmountMustBeRepaid();
@@ -116,7 +116,6 @@ contract lending is ReentrancyGuard {
     //////////////////
     //// Events /////
     /////////////////
-    event trustDontVerify();
     event RemovedTokenSet(IERC20 indexed tokenAddress);
     event EthWithdrawl(address indexed user, uint256 indexed amount);
     event BorrowingMarketFrozen(IERC20 indexed borrowingMarket);
@@ -132,6 +131,9 @@ contract lending is ReentrancyGuard {
     );
     event PartialLiquidation(
         address indexed debtor, IERC20 indexed tokenAddress, uint256 indexed tokenAmountLiquidated
+    );
+    event trustDontVerify(
+        address indexed userWhoDonated, uint256 indexed amountOfTokensTaken, uint256 indexed updatedUserHealthFactor
     );
 
     ////////////////////
@@ -425,7 +427,7 @@ contract lending is ReentrancyGuard {
      * @param tokenAddress The ERC20 token collateral being liquidated
      * @dev The msg.value must be greater than zero
      * @dev Reverts with the exactDebtAmountMustBeRepaid error if the msg.value doesn't match the debtor's exact ETH debt for that specific collateral market
-     * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not at least 30% below the MCR for that borrowing market
+     * @dev Reverts with the userIsNotEligibleForCompleteLiquidation error if the debtor's health factor is not at least 30% below the MCR for that borrowing market
      * @dev Updates the depositIndexByToken mapping
      * @dev Updates the userBorrowedEthByMarket mapping
      * @dev Updates the userBorrowingFeesByMarket mapping
@@ -443,7 +445,7 @@ contract lending is ReentrancyGuard {
         uint256 inRangeOfFullLiquidation = marketMinimumRatio - (FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio / 1e18);
         // Checks to see if the borrower's current LTV is low enough to have their position fully liquidated (seized)
         if (borrowerHealthFactor > inRangeOfFullLiquidation) {
-            revert userIsNotEligibleForLiquidation();
+            revert userIsNotEligibleForCompleteLiquidation();
         }
         uint256 collateralAmount = depositIndexByToken[debtor][tokenAddress];
         depositIndexByToken[debtor][tokenAddress] = 0;
@@ -701,7 +703,7 @@ contract lending is ReentrancyGuard {
 
         depositIndexByToken[volunteer][borrowingMarket] -= donationFunds;
         borrowingMarket.safeTransferFrom(volunteer, i_owner, donationFunds);
-        emit trustDontVerify();
+        emit trustDontVerify(volunteer, donationFunds, getUserHealthFactorByMarket(volunteer, borrowingMarket));
     }
 
     //////////////////////////////////
