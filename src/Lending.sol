@@ -422,7 +422,6 @@ contract lending is ReentrancyGuard {
      * @notice The liquidator must repay the borrower's entire ETH debt for that specific market in order to take possession of their deposited collateral
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param tokenAddress The ERC20 token collateral being liquidated
-     * @dev Only ERC20 tokens in the allowedTokens[] array may be liquidated
      * @dev The msg.value must be greater than zero
      * @dev Reverts with the exactDebtAmountMustBeRepaid error if the msg.value doesn't match the debtor's exact ETH debt for that specific collateral market
      * @dev Reverts with the userIsNotEligibleForLiquidation error if the debtor's health factor is not at least 30% below the MCR for that borrowing market
@@ -431,12 +430,7 @@ contract lending is ReentrancyGuard {
      * @dev Updates the userBorrowingFeesByMarket mapping
      * @dev Emits the CompleteLiquidation event
      */
-    function fullLiquidation(address debtor, IERC20 tokenAddress)
-        external
-        payable
-        isAllowedToken(tokenAddress)
-        moreThanZero(msg.value)
-    {
+    function fullLiquidation(address debtor, IERC20 tokenAddress) external payable moreThanZero(msg.value) {
         uint256 userEthMarketDebt =
             userBorrowedEthByMarket[debtor][tokenAddress] + userBorrowingFeesByMarket[debtor][tokenAddress];
         if (msg.value != userEthMarketDebt) {
