@@ -139,7 +139,7 @@ contract lending is ReentrancyGuard {
     /**
      * @notice Modifier to check if an ERC20 token is eligible to be used as collateral for borrowing lent ETH
      * @param tokenAddress The address of the ERC20 token being checked for collateral eligibility
-     * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), fullLiquidation(), partialLiquidation(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
+     * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
      * @dev Reverts with the notEligibleAsCollateral error if the ERC20 token is not in the allowedTokens[] array
      */
     modifier isAllowedToken(IERC20 tokenAddress) {
@@ -460,7 +460,6 @@ contract lending is ReentrancyGuard {
      * @notice After repaying this amount of debt, the liquidator claims the same dollar amount of collateral paid down + 5% as payment
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param tokenAddress The ERC20 token collateral being liquidated
-     * @dev Only ERC20 tokens in the allowedTokens[] array may be liquidated
      * @dev The msg.value must be greater than zero
      * @dev Reverts with the userIsNotEligibleForPartialLiquidation error if the debtor's health factor is not below the MCR for that borrowing market OR
      * if the debtor's health factor is at or lower than the market's MCR - 30% (i.e. borrower's health factor is 120% and the MCR is 150%)
@@ -470,12 +469,7 @@ contract lending is ReentrancyGuard {
      * @dev Updates the depositIndexByToken mapping
      * @dev Emits the PartialLiquidation event
      */
-    function partialLiquidation(address debtor, IERC20 tokenAddress)
-        external
-        payable
-        isAllowedToken(tokenAddress)
-        moreThanZero(msg.value)
-    {
+    function partialLiquidation(address debtor, IERC20 tokenAddress) external payable moreThanZero(msg.value) {
         uint256 borrowerHealthFactor = getUserHealthFactorByMarket(debtor, tokenAddress);
         uint256 marketMinimumRatio = minimumCollateralizationRatio[tokenAddress];
 
