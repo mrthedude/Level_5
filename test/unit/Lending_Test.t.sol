@@ -307,4 +307,49 @@ contract Lending_Test is Test, lendingDeployer {
         vm.stopPrank();
         vm.assertEq(contractOwner.balance, STARTING_USER_BALANCE - 0.5 ether + 0.025 ether - repayAmount);
     }
+
+    ///////////// Testing fullLiquidation() /////////////
+    function test_revertWhen_fullLiquidationInputIsZero() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        vm.expectRevert(lending.inputMustBeGreaterThanZero.selector);
+        lendingContract.fullLiquidation{value: 0}(contractOwner, myToken);
+        vm.stopPrank();
+    }
+
+    function test_revertWhen_exactDebtAmountIsntRepaid() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        vm.expectRevert(lending.exactDebtAmountMustBeRepaid.selector);
+        lendingContract.fullLiquidation{value: 1 ether}(contractOwner, myToken);
+        vm.stopPrank();
+    }
+
+    function testFuzz_revertWhen_cantFullLiquidationBecauseHealthFactorIsNotBelowCollateralizationLimit(
+        uint256 borrowAmount
+    ) public {
+        vm.assume(borrowAmount > 0 && borrowAmount <= 0.025 ether);
+        uint256 borrowingFee = borrowAmount * 0.05 ether / 1e18;
+        uint256 totalUserDebt = borrowAmount + borrowingFee;
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, borrowAmount);
+        vm.expectRevert(lending.userIsNotEligibleForLiquidation.selector);
+        lendingContract.fullLiquidation{value: totalUserDebt}(contractOwner, myToken);
+        vm.stopPrank();
+    }
 }
