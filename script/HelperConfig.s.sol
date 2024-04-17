@@ -8,7 +8,7 @@ contract HelperConfig is Script {
     NetworkConfig public activeNetworkConfig;
 
     uint8 public constant DECIMALS = 8; // 8;
-    int256 public constant INITIAL_PRICE = 2000e11; // $2000 per ETH
+    int256 public constant INITIAL_PRICE = 2e11; // $2000 per ETH
 
     struct NetworkConfig {
         address priceFeed;
