@@ -239,4 +239,31 @@ contract Lending_Test is Test, lendingDeployer {
         vm.stopPrank();
         vm.assertEq(contractOwner.balance, STARTING_USER_BALANCE - 0.5 ether + borrowAmount);
     }
+
+    ///////////// Testing repay() /////////////
+    function test_revertWhen_repayInputIsZero() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        vm.expectRevert(lending.inputMustBeGreaterThanZero.selector);
+        lendingContract.repay{value: 0}(myToken);
+        vm.stopPrank();
+    }
+
+    function test_revertWhen_repayAmountIsGreaterThanMarketDebt() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        vm.expectRevert(lending.cannotRepayMoreThanuserEthMarketDebt.selector);
+        lendingContract.repay{value: 0.02626 ether}(myToken);
+        vm.stopPrank();
+    }
 }
