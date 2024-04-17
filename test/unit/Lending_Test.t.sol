@@ -151,4 +151,79 @@ contract Lending_Test is Test, lendingDeployer {
         lendingContract.withdraw(myToken, 1e18);
         vm.stopPrank();
     }
+
+    function testFuzz_revertWhen_withdrawRequestExceedsDepositAmount(uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount > 100e18);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 200e18);
+        lendingContract.deposit(myToken, 100e18);
+        vm.expectRevert(lending.cannotWithdrawMoreCollateralThanWhatWasDeposited.selector);
+        lendingContract.withdraw(myToken, withdrawAmount);
+        vm.stopPrank();
+    }
+
+    function testFuzz_withdrawAmountIsSentBackToOwner(uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount > 0 && withdrawAmount <= 100e18);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 100e18);
+        lendingContract.deposit(myToken, 100e18);
+        lendingContract.withdraw(myToken, withdrawAmount);
+        vm.stopPrank();
+        uint256 remainingAmountInContract = 100e18 - withdrawAmount;
+        uint256 currentAmountInWallet = MAX_TOKEN_SUPPLY - remainingAmountInContract;
+        vm.assertEq(myToken.balanceOf(contractOwner), currentAmountInWallet);
+    }
+
+    ///////////// Testing borrow() /////////////
+    function test_revertWhen_borrowAmountIsZero() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 1 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 100e18);
+        lendingContract.deposit(myToken, 100e18);
+        vm.expectRevert(lending.inputMustBeGreaterThanZero.selector);
+        lendingContract.borrow(myToken, 0);
+        vm.stopPrank();
+    }
+
+    function test_revertWhen_borrowAttemptOnAFrozenMarket() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 1 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 100e18);
+        lendingContract.deposit(myToken, 100e18);
+        lendingContract.freezeBorrowingMarket(myToken);
+        vm.expectRevert(lending.borrowingMarketIsFrozen.selector);
+        lendingContract.borrow(myToken, 0.001 ether);
+        vm.stopPrank();
+    }
+
+    function testFuzz_revertWhen_notEnoughEthInContractForBorrow(uint256 borrowAmount) public {
+        vm.assume(borrowAmount > 1 ether);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 1 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), MAX_TOKEN_SUPPLY);
+        lendingContract.deposit(myToken, MAX_TOKEN_SUPPLY);
+        vm.expectRevert(lending.notEnoughEthInContract.selector);
+        lendingContract.borrow(myToken, borrowAmount);
+        vm.stopPrank();
+    }
+
+    function test_revertWhen_borrowAmountExceedsCollateralizationLimit() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 100e18);
+        lendingContract.deposit(myToken, 100e18);
+        vm.expectRevert(lending.notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth.selector);
+        lendingContract.borrow(myToken, 0.026 ether);
+        vm.stopPrank();
+    }
 }
