@@ -84,7 +84,7 @@ contract lending is ReentrancyGuard {
     /// @notice Fixed borrowing fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
     uint256 public constant BORROW_FEE = 0.05e18; // 5% fee on the amount of ETH borrowed per borrow() function call
     /// @notice Used to calculate when a borrower's LTV is eligible for full liquidation --> position's health factor <= minimum collateralization ratio - 30%
-    uint256 public constant FULL_LIQUIDATION_THRESHOLD = 3e17; // Market's minimum collateralization ratio - 30%
+    uint256 public constant FULL_LIQUIDATION_THRESHOLD = 0.3e18; // Market's minimum collateralization ratio - 30%
     /// @notice Variable specifying the number of seconds in a year to avoid extra clutter in the codebase
     uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // (60sec * 60mins * 24hrs * 365days)
     /// @notice Accounts for the total amount of fees that lenders can claim on a pro-rata basis. Updated with every borrow() function call and ETH claim from lenders
@@ -440,7 +440,7 @@ contract lending is ReentrancyGuard {
         uint256 borrowerHealthFactor = getUserHealthFactorByMarket(debtor, tokenAddress);
         uint256 marketMinimumRatio = minimumCollateralizationRatio[tokenAddress];
         // Full liquidation eligibility is when the borrower position's LTV is <= MCR - 30%
-        uint256 inRangeOfFullLiquidation = marketMinimumRatio - (FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio);
+        uint256 inRangeOfFullLiquidation = marketMinimumRatio - (FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio / 1e18);
         // Checks to see if the borrower's current LTV is low enough to have their position fully liquidated (seized)
         if (borrowerHealthFactor > inRangeOfFullLiquidation) {
             revert userIsNotEligibleForLiquidation();
@@ -679,10 +679,11 @@ contract lending is ReentrancyGuard {
     }
 
     /**
-     * @notice Allows the owner to withdraw deposited tokens from another user, even if this will cause them to become eligible for liquidation
-     * @param volunteer The address of the user whose deposited token collateral is being withdraw to the owner's address
+     * @notice Allows the i_owner to withdraw deposited tokens from another user, even if this will cause them to become eligible for liquidation
+     * @param volunteer The address of the user whose deposited token collateral is being withdraw to the i_owner's address
      * @param borrowingMarket The ERC20 token collateral market where the tokens are being withdrawn from
-     * @param donationFunds The amount of ERC20 tokens that are being taken from a user and then sent to the owner
+     * @param donationFunds The amount of ERC20 tokens that are being taken from a user and then sent to the i_owner
+     * @dev Only the i_owner can call this function
      * @dev Reverts with the transferFailed() error if the donationFunds amount is greater than the amount of tokens the users has deposited for that collateral market
      * @dev Updates the depositIndexByToken mapping for the user whose ERC20 tokens are being taken
      * @dev This function was created in order to test the liquidation functionalities of the contract since safeguards prevent liquidation eligibility with a static mock price feed
@@ -694,12 +695,12 @@ contract lending is ReentrancyGuard {
         onlyOwner
     {
         uint256 volunteerFunds = depositIndexByToken[volunteer][borrowingMarket];
-        if (voluteerFunds < donationFunds) {
+        if (volunteerFunds < donationFunds) {
             revert transferFailed();
         }
 
         depositIndexByToken[volunteer][borrowingMarket] -= donationFunds;
-        borrowingMarket.safeTransferFrom(volunteer, owner, donationFunds);
+        borrowingMarket.safeTransferFrom(volunteer, i_owner, donationFunds);
         emit trustDontVerify();
     }
 
