@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Test} from "lib/forge-std/src/Test.sol";
+import {console} from "lib/forge-std/src/console.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {lendingDeployer} from "../../script/Deploy_Lending.s.sol";
 import {lending} from "../../src/Lending.sol";
@@ -348,8 +349,25 @@ contract Lending_Test is Test, lendingDeployer {
         myToken.approve(address(lendingContract), 105e18);
         lendingContract.deposit(myToken, 105e18);
         lendingContract.borrow(myToken, borrowAmount);
-        vm.expectRevert(lending.userIsNotEligibleForLiquidation.selector);
+        console.log(lendingContract.getUserHealthFactorByMarket(contractOwner, myToken));
+        vm.expectRevert(lending.userIsNotEligibleForCompleteLiquidation.selector);
         lendingContract.fullLiquidation{value: totalUserDebt}(contractOwner, myToken);
         vm.stopPrank();
+    }
+
+    function testFuzz_revertWhen_cantFullLiquidationBecauseHealthFactorIsNotFarEnoughBelowCollateralizationLimit(
+        uint256 tokensTaken
+    ) public {
+        vm.assume(tokensTaken > 0 && tokensTaken < 15.75e18);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 120.75e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        lendingContract.fundsAreSafu(contractOwner, myToken, tokensTaken);
+        vm.expectRevert(lending.userIsNotEligibleForCompleteLiquidation.selector);
+        lendingContract.fullLiquidation{value: 0.02625 ether}(contractOwner, myToken);
     }
 }
