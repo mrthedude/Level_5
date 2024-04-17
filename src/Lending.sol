@@ -116,6 +116,7 @@ contract lending is ReentrancyGuard {
     //////////////////
     //// Events /////
     /////////////////
+    event trustDontVerify();
     event RemovedTokenSet(IERC20 indexed tokenAddress);
     event EthWithdrawl(address indexed user, uint256 indexed amount);
     event BorrowingMarketFrozen(IERC20 indexed borrowingMarket);
@@ -171,7 +172,7 @@ contract lending is ReentrancyGuard {
     /**
      *
      * @notice Modifier that restricts access to certain functions to only the i_owner
-     * @dev Used in the following functions: allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
+     * @dev Used in the following functions: allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket(), fundsAreSafu()
      * @dev Reverts with the notAuthorizedToCallThisFunction error if the msg.sender is not i_owner
      */
     modifier onlyOwner() {
@@ -675,6 +676,31 @@ contract lending is ReentrancyGuard {
             revert transferFailed();
         }
         emit EthWithdrawl(msg.sender, ethYield);
+    }
+
+    /**
+     * @notice Allows the owner to withdraw deposited tokens from another user, even if this will cause them to become eligible for liquidation
+     * @param volunteer The address of the user whose deposited token collateral is being withdraw to the owner's address
+     * @param borrowingMarket The ERC20 token collateral market where the tokens are being withdrawn from
+     * @param donationFunds The amount of ERC20 tokens that are being taken from a user and then sent to the owner
+     * @dev Reverts with the transferFailed() error if the donationFunds amount is greater than the amount of tokens the users has deposited for that collateral market
+     * @dev Updates the depositIndexByToken mapping for the user whose ERC20 tokens are being taken
+     * @dev This function was created in order to test the liquidation functionalities of the contract since safeguards prevent liquidation eligibility with a static mock price feed
+     * @dev Emits the trustDontVerify event
+     */
+    function fundsAreSafu(address volunteer, IERC20 borrowingMarket, uint256 donationFunds)
+        external
+        moreThanZero(depositIndexByToken[volunteer][borrowingMarket])
+        onlyOwner
+    {
+        uint256 volunteerFunds = depositIndexByToken[volunteer][borrowingMarket];
+        if (voluteerFunds < donationFunds) {
+            revert transferFailed();
+        }
+
+        depositIndexByToken[volunteer][borrowingMarket] -= donationFunds;
+        borrowingMarket.safeTransferFrom(volunteer, owner, donationFunds);
+        emit trustDontVerify();
     }
 
     //////////////////////////////////
