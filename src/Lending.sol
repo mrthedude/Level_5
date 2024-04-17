@@ -139,7 +139,7 @@ contract lending is ReentrancyGuard {
     /**
      * @notice Modifier to check if an ERC20 token is eligible to be used as collateral for borrowing lent ETH
      * @param tokenAddress The address of the ERC20 token being checked for collateral eligibility
-     * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), repay(), fullLiquidation(), partialLiquidation(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
+     * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), fullLiquidation(), partialLiquidation(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
      * @dev Reverts with the notEligibleAsCollateral error if the ERC20 token is not in the allowedTokens[] array
      */
     modifier isAllowedToken(IERC20 tokenAddress) {
@@ -395,7 +395,7 @@ contract lending is ReentrancyGuard {
      * @dev Updates the userBorrowedEthByMarket mapping
      * @dev Emits the Repay event
      */
-    function repay(IERC20 collateralMarket) external payable moreThanZero(msg.value) isAllowedToken(collateralMarket) {
+    function repay(IERC20 collateralMarket) external payable moreThanZero(msg.value) {
         uint256 userEthMarketDebt = userBorrowedEthByMarket[msg.sender][collateralMarket]
             + userBorrowingFeesByMarket[msg.sender][collateralMarket];
         uint256 repaymentAmount = msg.value;
