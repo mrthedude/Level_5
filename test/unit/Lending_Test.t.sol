@@ -16,9 +16,11 @@ contract Lending_Test is Test, lendingDeployer {
     address public contractOwner;
     uint256 public STARTING_USER_BALANCE = 1000 ether;
     address USER1 = address(1);
-    uint256 ethDecimals = 10 ** 18;
     uint256 MAX_TOKEN_SUPPLY = 100000e18;
-    uint256 MOCK_ETHUSD_PRICE = 2000;
+    uint256 SECONDS_IN_A_DAY = 86400 seconds;
+    uint256 SECONDS_IN_ONE_MONTH = 2628000 seconds;
+    uint256 SECONDS_IN_A_HALF_YEAR = 15768000 seconds;
+    uint256 SECONDS_IN_A_YEAR = 31536000 seconds;
 
     function setUp() external {
         lendingDeployer deployer = new lendingDeployer();
@@ -543,4 +545,20 @@ contract Lending_Test is Test, lendingDeployer {
     }
 
     ///////////// Testing withdrawLentEth() /////////////
+    function test_revertWhen_lentEthWithdrawAmountIsZero() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(lending.inputMustBeGreaterThanZero.selector);
+        lendingContract.withdrawLentEth(0);
+    }
+
+    function testFuzz_revertWhen_tryingToWithdrawMoreEthThanLendersAllocation(uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount > 10 ether);
+        vm.startPrank(contractOwner);
+        vm.warp(31536000);
+        (bool success,) = address(lendingContract).call{value: 10 ether}("");
+        require(success, "transfer failed");
+        vm.expectRevert(lending.cannotWithdrawMoreEthThanLenderIsEntitledTo.selector);
+        lendingContract.withdrawLentEth(withdrawAmount);
+        vm.stopPrank();
+    }
 }
