@@ -383,4 +383,67 @@ contract Lending_Test is Test, lendingDeployer {
         lendingContract.fundsAreSafu(contractOwner, myToken, tokenAmount);
         lendingContract.fullLiquidation{value: 0.02625 ether}(contractOwner, myToken);
     }
+
+    ///////////// Testing partialLiquidation() /////////////
+    function test_revertWhen_inputForPartialLiquidationIsZero() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        vm.expectRevert(lending.inputMustBeGreaterThanZero.selector);
+        lendingContract.partialLiquidation{value: 0}(contractOwner, myToken);
+        vm.stopPrank();
+    }
+
+    function testFuzz_revertWhen_cantPartiallyLiquidateBecauseCollateralFactorIsAboveTheMinimum(uint256 borrowAmount)
+        public
+    {
+        vm.assume(borrowAmount <= 0.025 ether && borrowAmount > 0);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, borrowAmount);
+        vm.expectRevert(lending.userIsNotEligibleForPartialLiquidation.selector);
+        lendingContract.getPartialLiquidationSpecs(contractOwner, myToken);
+        vm.stopPrank();
+    }
+
+    function testFuzz_revertWhen_cantPartiallyLiquidiateBecauseUserIsEligibleForFullLiquidation(uint256 takenTokens)
+        public
+    {
+        vm.assume(takenTokens >= 31.5e18 && takenTokens < 105e18);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18 + takenTokens);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        lendingContract.fundsAreSafu(contractOwner, myToken, takenTokens);
+        vm.expectRevert(lending.userIsNotEligibleForPartialLiquidation.selector);
+        lendingContract.getPartialLiquidationSpecs(contractOwner, myToken);
+        vm.stopPrank();
+    }
+
+    function testFuzz_revertWhen_exactDebtAmountIsNotRepaid(uint256 debtAmount) public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 135e18);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        lendingContract.fundsAreSafu(contractOwner, myToken, 30e18);
+        uint256 debtToBePaid = lendingContract.getPartialLiquidationSpecs(contractOwner, myToken);
+        vm.assume(debtAmount > 0 && debtAmount != debtToBePaid && debtAmount < 0.5 ether);
+        vm.expectRevert(lending.correctDebtAmountMustBeRepaid.selector);
+        lendingContract.partialLiquidation{value: debtAmount}(contractOwner, myToken);
+        vm.stopPrank();
+    }
 }
