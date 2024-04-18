@@ -14,7 +14,7 @@ contract Lending_Test is Test, lendingDeployer {
     token public myToken;
     HelperConfig public helperConfig;
     address public contractOwner;
-    uint256 public STARTING_USER_BALANCE = 10 ether;
+    uint256 public STARTING_USER_BALANCE = 1000 ether;
     address USER1 = address(1);
     uint256 ethDecimals = 10 ** 18;
     uint256 MAX_TOKEN_SUPPLY = 100000e18;
@@ -470,4 +470,77 @@ contract Lending_Test is Test, lendingDeployer {
         console.log("owner's token balance AFTER partial liquidation: ", myToken.balanceOf(contractOwner));
         vm.stopPrank();
     }
+
+    ///////////// Testing freezeBorrowingMarket() /////////////
+    function test_revertWhen_calledByNotTheOwner() public {
+        vm.prank(USER1);
+        vm.expectRevert(lending.notAuthorizedToCallThisFunction.selector);
+        lendingContract.freezeBorrowingMarket(myToken);
+    }
+
+    function test_revertWhen_calledOnAMarketNotInTheAllowedList() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(lending.notEligibleAsCollateral.selector);
+        lendingContract.freezeBorrowingMarket(myToken);
+    }
+
+    function test_revertWhen_borrowingMarketHasAlreadyBeenFrozen() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        lendingContract.freezeBorrowingMarket(myToken);
+        vm.expectRevert(lending.borrowingMarketHasAlreadyBeenFrozen.selector);
+        lendingContract.freezeBorrowingMarket(myToken);
+        vm.stopPrank();
+    }
+
+    ///////////// Testing unfreezeBorrowingMarket() /////////////
+    function test_revertWhen_unfreezeCalledByNotTheOwner() public {
+        vm.prank(USER1);
+        vm.expectRevert(lending.notAuthorizedToCallThisFunction.selector);
+        lendingContract.unfreezeBorrowingMarket(myToken);
+    }
+
+    function test_revertWhen_unfreezeCalledOnAMarketNotInTheAllowedList() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(lending.notEligibleAsCollateral.selector);
+        lendingContract.unfreezeBorrowingMarket(myToken);
+    }
+
+    function test_revertWhen_unfreezeCalledOnAnActiveMarket() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        vm.expectRevert(lending.borrowingMarketIsCurrentlyActive.selector);
+        lendingContract.unfreezeBorrowingMarket(myToken);
+        vm.stopPrank();
+    }
+
+    function test_unfreezeAllowsAMarketToBeDepositedIntoAgain() public {
+        vm.startPrank(contractOwner);
+        myToken.approve(address(lendingContract), 10e18);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        lendingContract.freezeBorrowingMarket(myToken);
+        vm.expectRevert(lending.borrowingMarketIsFrozen.selector);
+        lendingContract.deposit(myToken, 10e18);
+        lendingContract.unfreezeBorrowingMarket(myToken);
+        lendingContract.deposit(myToken, 10e18);
+        vm.stopPrank();
+        assertEq(myToken.balanceOf(contractOwner), MAX_TOKEN_SUPPLY - 10e18);
+    }
+
+    function test_unfreezeAllowsMarketToBeBorrowedInAgain() public {
+        vm.startPrank(contractOwner);
+        myToken.approve(address(lendingContract), MAX_TOKEN_SUPPLY);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 50 ether}("");
+        require(success, "transfer failed");
+        lendingContract.deposit(myToken, MAX_TOKEN_SUPPLY);
+        lendingContract.freezeBorrowingMarket(myToken);
+        vm.expectRevert(lending.borrowingMarketIsFrozen.selector);
+        lendingContract.borrow(myToken, 10 ether);
+        lendingContract.unfreezeBorrowingMarket(myToken);
+        lendingContract.borrow(myToken, 10 ether);
+        assertEq(contractOwner.balance, STARTING_USER_BALANCE - 40 ether);
+    }
+
+    ///////////// Testing withdrawLentEth() /////////////
 }
