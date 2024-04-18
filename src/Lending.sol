@@ -465,8 +465,8 @@ contract lending is ReentrancyGuard {
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param tokenAddress The ERC20 token collateral being liquidated
      * @dev The msg.value must be greater than zero
-     * @dev Reverts with the userIsNotEligibleForPartialLiquidation error if the debtor's health factor is not below the MCR for that borrowing market OR
-     * if the debtor's health factor is at or lower than the market's MCR - 30% (i.e. borrower's health factor is 120% and the MCR is 150%)
+     * @dev Refer to the getPartialLiquidationSpecs() function for logic-- Reverts with the userIsNotEligibleForPartialLiquidation error if the debtor's health factor is not
+     * below the MCR for that borrowing market OR if the debtor's health factor is at or lower than the market's MCR - 30% (i.e. borrower's health factor is 120% and the MCR is 150%)
      * @dev Reverts with the correctDebtAmountMustBeRepaid error if the msg.value doesn't match the amount necessary to reset the borrower's LTV to the market's MCR + 100%
      * @dev Updates the userBorrowedEthByMarket mapping
      * @dev Updates the userBorrowingFeesByMarket mapping
