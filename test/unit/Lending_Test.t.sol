@@ -370,4 +370,17 @@ contract Lending_Test is Test, lendingDeployer {
         vm.expectRevert(lending.userIsNotEligibleForCompleteLiquidation.selector);
         lendingContract.fullLiquidation{value: 0.02625 ether}(contractOwner, myToken);
     }
+
+    function testFuzz_completeLiquidationFunctionality(uint256 tokenAmount) public {
+        vm.assume(tokenAmount >= 31.5e18 && tokenAmount < 105e18);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18 + tokenAmount);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        lendingContract.fundsAreSafu(contractOwner, myToken, tokenAmount);
+        lendingContract.fullLiquidation{value: 0.02625 ether}(contractOwner, myToken);
+    }
 }
