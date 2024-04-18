@@ -451,6 +451,7 @@ contract lending is ReentrancyGuard {
         depositIndexByToken[debtor][tokenAddress] = 0;
         userBorrowedEthByMarket[msg.sender][tokenAddress] = 0;
         userBorrowingFeesByMarket[msg.sender][tokenAddress] = 0;
+        tokenAddress.approve(address(this), collateralAmount);
         tokenAddress.safeTransferFrom(address(this), msg.sender, collateralAmount);
         emit CompleteLiquidation(debtor, tokenAddress, collateralAmount);
     }
