@@ -474,14 +474,6 @@ contract lending is ReentrancyGuard {
      * @dev Emits the PartialLiquidation event
      */
     function partialLiquidation(address debtor, IERC20 tokenAddress) external payable moreThanZero(msg.value) {
-        uint256 borrowerHealthFactor = getUserHealthFactorByMarket(debtor, tokenAddress);
-        uint256 marketMinimumRatio = minimumCollateralizationRatio[tokenAddress];
-
-        // If the borrower's health factor is at or below this number then they aren't eligible for partial liquidation, only full liquidation (see above function)
-        uint256 inRangeOfFullLiquidation =
-            marketMinimumRatio - ((FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio) / 1e18);
-
-        // The amount of ETH debt the liquidator must pay in order to claim a portion of the borrower's collateral
         uint256 amountOfDebtToPayOffInEth = getPartialLiquidationSpecs(debtor, tokenAddress);
 
         // Same as amountOfDebtToPayOffInEth but denominated in USD to calculate the amount of collateral the liquidator claims as payment (each token is valued at $1)
@@ -493,11 +485,6 @@ contract lending is ReentrancyGuard {
 
         if (msg.value != amountOfDebtToPayOffInEth) {
             revert correctDebtAmountMustBeRepaid();
-        }
-
-        // If the position's health factor is not < the MCR OR if the position's health factor is <= the MCR - 30%, then the position cannot be partially liquidated
-        if (borrowerHealthFactor >= marketMinimumRatio || borrowerHealthFactor <= inRangeOfFullLiquidation) {
-            revert userIsNotEligibleForPartialLiquidation();
         }
 
         // The borrowing fees are prioritized in the balances accounting if the debtor's borrowing fees are <= the amount of ETH debt being paid off
