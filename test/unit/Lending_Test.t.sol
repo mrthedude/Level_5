@@ -446,4 +446,28 @@ contract Lending_Test is Test, lendingDeployer {
         lendingContract.partialLiquidation{value: debtAmount}(contractOwner, myToken);
         vm.stopPrank();
     }
+    // between 140% and 200% collateralization ratios
+    // LTV = collateral / borrow
+    // 200% LTV = $105 / 0.02625ETH ($52.5)
+    // 140% LTV = $73.5 / 0.02625ETH ($52.5)
+    // collateral must be < $105
+    // collateral must be > $73.5
+    // tokensToTake > 0 && tokensToTake < $31.5 (0.01575 ETH)
+
+    function testFuzz_partialLiquidationFunctionsAsIntended(uint256 tokensToTake) public {
+        vm.assume(tokensToTake > 0 && tokensToTake < 31.5e18);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
+        require(success, "transfer failed");
+        myToken.approve(address(lendingContract), 105e18 + tokensToTake);
+        lendingContract.deposit(myToken, 105e18);
+        lendingContract.borrow(myToken, 0.025 ether);
+        lendingContract.fundsAreSafu(contractOwner, myToken, tokensToTake);
+        console.log("owner's token balance before partial liquidation: ", myToken.balanceOf(contractOwner));
+        uint256 debtToBePaid = lendingContract.getPartialLiquidationSpecs(contractOwner, myToken);
+        lendingContract.partialLiquidation{value: debtToBePaid}(contractOwner, myToken);
+        console.log("owner's token balance AFTER partial liquidation: ", myToken.balanceOf(contractOwner));
+        vm.stopPrank();
+    }
 }
