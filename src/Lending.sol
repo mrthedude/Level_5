@@ -478,7 +478,8 @@ contract lending is ReentrancyGuard {
         uint256 marketMinimumRatio = minimumCollateralizationRatio[tokenAddress];
 
         // If the borrower's health factor is at or below this number then they aren't eligible for partial liquidation, only full liquidation (see above function)
-        uint256 inRangeOfFullLiquidation = marketMinimumRatio - (FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio);
+        uint256 inRangeOfFullLiquidation =
+            marketMinimumRatio - ((FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio) / 1e18);
 
         // The amount of ETH debt the liquidator must pay in order to claim a portion of the borrower's collateral
         uint256 amountOfDebtToPayOffInEth = getPartialLiquidationSpecs(debtor, tokenAddress);
@@ -811,17 +812,21 @@ contract lending is ReentrancyGuard {
         // If the borrowing position's health factor is below this number, it is eligible for some form of liquidation (partial or full depending on how far below it is)
         uint256 marketMinimumRatio = minimumCollateralizationRatio[tokenAddress];
 
-        uint256 inRangeOfFullLiquidation = marketMinimumRatio - (FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio);
+        uint256 inRangeOfFullLiquidation =
+            marketMinimumRatio - ((FULL_LIQUIDATION_THRESHOLD * marketMinimumRatio) / 1e18);
 
-        // If the position's health factor is not less than the MCR OR if the position's health factor is less than the MCR - 30%, then the position cannot be partially liquidated
-        if (borrowerHealthFactor >= marketMinimumRatio || borrowerHealthFactor < inRangeOfFullLiquidation) {
+        // If the position's health factor is not less than the MCR OR if the position's health factor is <= the MCR - 30%, then the position cannot be partially liquidated
+        if (borrowerHealthFactor >= marketMinimumRatio || borrowerHealthFactor <= inRangeOfFullLiquidation) {
             revert userIsNotEligibleForPartialLiquidation();
         }
         // The collateralization level that the liquidator must reset the borrower's position to in order to then claim a portion of their collateral
-        uint256 idealCollateralizationRatio = marketMinimumRatio * 2e18; // MCR + 100%
+        uint256 idealCollateralizationRatio = marketMinimumRatio * 2; // MCR + 100%
 
         // The amount of debt in USD the borrowing position should have to set its health factor to the idealCollateralizationRatio
-        uint256 idealDebtAmountInDollars = userDepositedCollateral * 1e18 / idealCollateralizationRatio * 100;
+        // LTV = collateral / borrow
+        // LTV * borrow = collateral
+        // borrow = collateral / LTV
+        uint256 idealDebtAmountInDollars = userDepositedCollateral * 1e18 / idealCollateralizationRatio;
 
         // Coverts the idealDebtAmountInDollars to ETH as the denominator
         uint256 idealDebtAmountInEth = idealDebtAmountInDollars * 1e18 / priceConverter.getEthPrice(i_ethUsdPriceFeed);
