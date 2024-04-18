@@ -489,14 +489,14 @@ contract lending is ReentrancyGuard {
             priceConverter.getEthConversionRate(amountOfDebtToPayOffInEth, i_ethUsdPriceFeed);
 
         // The amount of collateral the liquidator claims, calculated by the USD amount they spent paying off the borrower's debt plus a 5% bonus as payment
-        uint256 liquidatorPayment = amountOfDebtToPayOffInUsd * 0.05e18; // 5% payment for the liquidator's service
+        uint256 liquidatorPayment = (amountOfDebtToPayOffInUsd * 1.05e18) / 1e18;
 
         if (msg.value != amountOfDebtToPayOffInEth) {
             revert correctDebtAmountMustBeRepaid();
         }
 
-        // If the position's health factor is not < the MCR OR if the position's health factor is < the MCR - 30%, then the position cannot be partially liquidated
-        if (borrowerHealthFactor >= marketMinimumRatio || borrowerHealthFactor < inRangeOfFullLiquidation) {
+        // If the position's health factor is not < the MCR OR if the position's health factor is <= the MCR - 30%, then the position cannot be partially liquidated
+        if (borrowerHealthFactor >= marketMinimumRatio || borrowerHealthFactor <= inRangeOfFullLiquidation) {
             revert userIsNotEligibleForPartialLiquidation();
         }
 
@@ -513,6 +513,7 @@ contract lending is ReentrancyGuard {
 
         userBorrowedEthByMarket[debtor][tokenAddress] -= amountOfDebtToPayOffInEth;
         depositIndexByToken[debtor][tokenAddress] -= liquidatorPayment;
+        tokenAddress.approve(address(this), liquidatorPayment);
         tokenAddress.safeTransferFrom(address(this), msg.sender, liquidatorPayment);
         emit PartialLiquidation(debtor, tokenAddress, liquidatorPayment);
     }
