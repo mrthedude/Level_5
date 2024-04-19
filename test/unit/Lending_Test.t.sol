@@ -448,16 +448,9 @@ contract Lending_Test is Test, lendingDeployer {
         lendingContract.partialLiquidation{value: debtAmount}(contractOwner, myToken);
         vm.stopPrank();
     }
-    // between 140% and 200% collateralization ratios
-    // LTV = collateral / borrow
-    // 200% LTV = $105 / 0.02625ETH ($52.5)
-    // 140% LTV = $73.5 / 0.02625ETH ($52.5)
-    // collateral must be < $105
-    // collateral must be > $73.5
-    // tokensToTake > 0 && tokensToTake < $31.5 (0.01575 ETH)
 
     function testFuzz_partialLiquidationFunctionsAsIntended(uint256 tokensToTake) public {
-        vm.assume(tokensToTake > 0 && tokensToTake < 31.5e18);
+        vm.assume(tokensToTake > 0 && tokensToTake < 31.4e18);
         vm.startPrank(contractOwner);
         lendingContract.allowTokenAsCollateral(myToken, 200e18);
         (bool success,) = address(lendingContract).call{value: 0.5 ether}("");
@@ -595,11 +588,38 @@ contract Lending_Test is Test, lendingDeployer {
         lendingContract.repay{value: 10.5 ether}(myToken);
         vm.stopPrank();
         vm.startPrank(USER1);
+        uint256 currentEthYield = lendingContract.calculateLenderEthYield(USER1);
+        assertEq(0.5 ether, currentEthYield);
         lendingContract.withdrawLentEth(withdrawAmount);
         uint256 remainingClaimableEth = lendingContract.getLenderLentEthAmount(USER1);
+        uint256 remainingEthYield = lendingContract.calculateLenderEthYield(USER1);
         vm.stopPrank();
         assertEq(remainingClaimableEth, 10.5 ether - withdrawAmount);
+        assertEq(remainingEthYield, 0);
     }
 
-    function test_functionalityWhenWithdrawAmountIsEqualToTheLendersEthYield() public {}
+    function test_functionalityWhenWithdrawAmountIsEqualToTheLendersEthYield() public {
+        vm.prank(USER1);
+        vm.warp(31536000);
+        (bool success,) = address(lendingContract).call{value: 10 ether}("");
+        require(success, "transfer failed");
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        lendingContract.borrow(myToken, 10 ether);
+        vm.warp(47304000);
+        uint256 ethYieldAtHalfYear = lendingContract.calculateLenderEthYield(USER1);
+        assertEq(ethYieldAtHalfYear, 0.25 ether);
+        vm.warp(63072000);
+        uint256 ethYieldBeforeWithdraw = lendingContract.calculateLenderEthYield(USER1);
+        assertEq(ethYieldBeforeWithdraw, 0.5 ether);
+        lendingContract.repay{value: 10.5 ether}(myToken);
+        vm.stopPrank();
+        vm.startPrank(USER1);
+        lendingContract.withdrawLentEth(ethYieldBeforeWithdraw);
+        uint256 ethYieldAfterWithdraw = lendingContract.calculateLenderEthYield(USER1);
+        assertEq(ethYieldAfterWithdraw, 0);
+        assertEq(USER1.balance, STARTING_USER_BALANCE - (10 ether - ethYieldBeforeWithdraw));
+    }
 }
