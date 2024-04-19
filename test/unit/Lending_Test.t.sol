@@ -579,4 +579,27 @@ contract Lending_Test is Test, lendingDeployer {
         vm.expectRevert(lending.notEnoughEthInContract.selector);
         lendingContract.withdrawLentEth(ethAmount);
     }
+
+    function testFuzz_functionalityWhenWithdrawAmountIsLessThanLendersEthYield(uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount > 0 && withdrawAmount < 0.5 ether);
+        vm.prank(USER1);
+        vm.warp(31536000);
+        (bool success,) = address(lendingContract).call{value: 10 ether}("");
+        require(success, "transfer failed");
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        lendingContract.borrow(myToken, 10 ether);
+        vm.warp(63072000);
+        lendingContract.repay{value: 10.5 ether}(myToken);
+        vm.stopPrank();
+        vm.startPrank(USER1);
+        lendingContract.withdrawLentEth(withdrawAmount);
+        uint256 remainingClaimableEth = lendingContract.getLenderLentEthAmount(USER1);
+        vm.stopPrank();
+        assertEq(remainingClaimableEth, 10.5 ether - withdrawAmount);
+    }
+
+    function test_functionalityWhenWithdrawAmountIsEqualToTheLendersEthYield() public {}
 }
