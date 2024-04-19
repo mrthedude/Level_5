@@ -17,10 +17,10 @@ contract Lending_Test is Test, lendingDeployer {
     uint256 public STARTING_USER_BALANCE = 1000 ether;
     address USER1 = address(1);
     uint256 MAX_TOKEN_SUPPLY = 100000e18;
-    uint256 SECONDS_IN_A_DAY = 86400 seconds;
-    uint256 SECONDS_IN_ONE_MONTH = 2628000 seconds;
-    uint256 SECONDS_IN_A_HALF_YEAR = 15768000 seconds;
-    uint256 SECONDS_IN_A_YEAR = 31536000 seconds;
+    uint256 SECONDS_IN_A_DAY = 86400;
+    uint256 SECONDS_IN_ONE_MONTH = 2628000;
+    uint256 SECONDS_IN_A_HALF_YEAR = 15768000;
+    uint256 SECONDS_IN_A_YEAR = 31536000;
 
     function setUp() external {
         lendingDeployer deployer = new lendingDeployer();
@@ -547,7 +547,7 @@ contract Lending_Test is Test, lendingDeployer {
     function testFuzz_revertWhen_tryingToWithdrawMoreEthThanLendersAllocation(uint256 withdrawAmount) public {
         vm.assume(withdrawAmount > 10 ether);
         vm.startPrank(contractOwner);
-        vm.warp(31536000);
+        vm.warp(SECONDS_IN_A_YEAR);
         (bool success,) = address(lendingContract).call{value: 10 ether}("");
         require(success, "transfer failed");
         vm.expectRevert(lending.cannotWithdrawMoreEthThanLenderIsEntitledTo.selector);
@@ -558,7 +558,7 @@ contract Lending_Test is Test, lendingDeployer {
     function testFuzz_revertWhen_withdrawAttemptWithNotEnoughEthInContract(uint256 ethAmount) public {
         vm.assume(ethAmount > 0 && ethAmount <= 10.5 ether);
         vm.prank(USER1);
-        vm.warp(31536000);
+        vm.warp(SECONDS_IN_A_YEAR);
         (bool success,) = address(lendingContract).call{value: 10 ether}("");
         require(success, "transfer failed");
         vm.startPrank(contractOwner);
@@ -567,7 +567,7 @@ contract Lending_Test is Test, lendingDeployer {
         lendingContract.deposit(myToken, 42000e18);
         lendingContract.borrow(myToken, 10 ether);
         vm.stopPrank();
-        vm.warp(63072000);
+        vm.warp(SECONDS_IN_A_YEAR * 2);
         vm.prank(USER1);
         vm.expectRevert(lending.notEnoughEthInContract.selector);
         lendingContract.withdrawLentEth(ethAmount);
@@ -576,7 +576,7 @@ contract Lending_Test is Test, lendingDeployer {
     function testFuzz_functionalityWhenWithdrawAmountIsLessThanLendersEthYield(uint256 withdrawAmount) public {
         vm.assume(withdrawAmount > 0 && withdrawAmount < 0.5 ether);
         vm.prank(USER1);
-        vm.warp(31536000);
+        vm.warp(SECONDS_IN_A_YEAR);
         (bool success,) = address(lendingContract).call{value: 10 ether}("");
         require(success, "transfer failed");
         vm.startPrank(contractOwner);
@@ -584,7 +584,7 @@ contract Lending_Test is Test, lendingDeployer {
         myToken.approve(address(lendingContract), 42000e18);
         lendingContract.deposit(myToken, 42000e18);
         lendingContract.borrow(myToken, 10 ether);
-        vm.warp(63072000);
+        vm.warp(SECONDS_IN_A_YEAR * 2);
         lendingContract.repay{value: 10.5 ether}(myToken);
         vm.stopPrank();
         vm.startPrank(USER1);
@@ -600,7 +600,7 @@ contract Lending_Test is Test, lendingDeployer {
 
     function test_functionalityWhenWithdrawAmountIsEqualToTheLendersEthYield() public {
         vm.prank(USER1);
-        vm.warp(31536000);
+        vm.warp(SECONDS_IN_A_YEAR);
         (bool success,) = address(lendingContract).call{value: 10 ether}("");
         require(success, "transfer failed");
         vm.startPrank(contractOwner);
@@ -608,10 +608,10 @@ contract Lending_Test is Test, lendingDeployer {
         myToken.approve(address(lendingContract), 42000e18);
         lendingContract.deposit(myToken, 42000e18);
         lendingContract.borrow(myToken, 10 ether);
-        vm.warp(47304000);
+        vm.warp(SECONDS_IN_A_YEAR + SECONDS_IN_A_HALF_YEAR);
         uint256 ethYieldAtHalfYear = lendingContract.calculateLenderEthYield(USER1);
         assertEq(ethYieldAtHalfYear, 0.25 ether);
-        vm.warp(63072000);
+        vm.warp(SECONDS_IN_A_YEAR * 2);
         uint256 ethYieldBeforeWithdraw = lendingContract.calculateLenderEthYield(USER1);
         assertEq(ethYieldBeforeWithdraw, 0.5 ether);
         lendingContract.repay{value: 10.5 ether}(myToken);
@@ -621,5 +621,77 @@ contract Lending_Test is Test, lendingDeployer {
         uint256 ethYieldAfterWithdraw = lendingContract.calculateLenderEthYield(USER1);
         assertEq(ethYieldAfterWithdraw, 0);
         assertEq(USER1.balance, STARTING_USER_BALANCE - (10 ether - ethYieldBeforeWithdraw));
+    }
+
+    function test_functionalityWhenWithdrawAmountIsGreaterThanLendersEthYield() public {
+        // block.timestamp is set to 31536000
+        vm.warp(SECONDS_IN_A_YEAR);
+
+        // USER1 deposits 10 ether
+        vm.prank(USER1);
+        (bool success,) = address(lendingContract).call{value: 10 ether}(""); // USER1 owns 1/5 of the lending pool
+        require(success, "transfer failed");
+
+        // contractOwner deposits 40 ether
+        vm.startPrank(contractOwner);
+        (bool success1,) = address(lendingContract).call{value: 40 ether}(""); // contract owner owns 4/5 of the lending pool
+        require(success1, "transfer failed");
+
+        // contractOwner adds myToken as eligible collateral
+        // contractOwner deposits 42k tokens
+        // contractOwner borrows 10 ether, making their total debt 10.5 ether (from borrowing fees)
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        lendingContract.borrow(myToken, 10 ether);
+
+        // block.timestamp is set to 1/2 year after the lending start-time
+        // The lending yield is calculated and then checked for USER1 and contractOwner
+        vm.warp(SECONDS_IN_A_YEAR + SECONDS_IN_A_HALF_YEAR);
+        uint256 contractOwnerEthYieldAtHalfYear = lendingContract.calculateLenderEthYield(contractOwner);
+        uint256 userEthYieldAtHalfYear = lendingContract.calculateLenderEthYield(USER1);
+        assertEq(contractOwnerEthYieldAtHalfYear, 0.2e18);
+        assertEq(userEthYieldAtHalfYear, 0.05e18);
+
+        // block.timestamp is set to 1 year after the lending start-time
+        // The lending yield is calculated and then checked for USER1 and contractOwner
+        vm.warp(SECONDS_IN_A_YEAR * 2);
+        uint256 contractOwnerEthYieldAfterOneYear = lendingContract.calculateLenderEthYield(contractOwner);
+        uint256 userEthYieldAfterOneYear = lendingContract.calculateLenderEthYield(USER1);
+        assertEq(contractOwnerEthYieldAfterOneYear, 0.4e18);
+        assertEq(userEthYieldAfterOneYear, 0.1e18);
+
+        // contractOwner repays their 10.5 ether debt
+        lendingContract.repay{value: 10.5 ether}(myToken);
+
+        // The lending yield is calculated and then checked for USER1 and contractOwner
+        // The amount of eth deposited is calculated and then checked for USER1 and contractOwner
+        // The lending contract's eth balance is checked
+        uint256 contractOwnerEthYieldAfterDebtRepaid = lendingContract.calculateLenderEthYield(contractOwner);
+        uint256 userEthYieldAfterOwnerRepaidDebt = lendingContract.calculateLenderEthYield(USER1);
+        uint256 contractOwnerLentEthAmountAfterDebtRepaid = lendingContract.getLenderLentEthAmount(contractOwner);
+        uint256 userLentEthAmountAfterOwnerRepaidDebt = lendingContract.getLenderLentEthAmount(USER1);
+        assertEq(contractOwnerEthYieldAfterDebtRepaid, 0.4e18);
+        assertEq(userEthYieldAfterOwnerRepaidDebt, 0.1e18);
+        assertEq(contractOwnerLentEthAmountAfterDebtRepaid, 40e18);
+        assertEq(userLentEthAmountAfterOwnerRepaidDebt, 10e18);
+        assertEq(address(lendingContract).balance, 50.5 ether);
+
+        // contractOwner withdraws their entire allocation of eth (40.4 eth--> lent + yield)
+        lendingContract.withdrawLentEth(40.4 ether);
+
+        // The lending yield is calculated and then checked for USER1 and contractOwner -- ERROR
+        // The amount of eth deposited is calculated and then checked for USER1 and contractOwner
+        // The lending contract's eth balance is checked
+        uint256 contractOwnerEthYieldAfterCompleteWithdraw = lendingContract.calculateLenderEthYield(contractOwner);
+        uint256 userEthYieldAfterOwnerCompleteWithdraw = lendingContract.calculateLenderEthYield(USER1);
+        uint256 contractOwnerLentEthAmountAfterCompleteWithdraw = lendingContract.getLenderLentEthAmount(contractOwner);
+        uint256 userLentEthAmountAfterOwnerCompleteWithdraw = lendingContract.getLenderLentEthAmount(USER1);
+        assertEq(contractOwnerEthYieldAfterCompleteWithdraw, 0);
+        assertEq(contractOwnerLentEthAmountAfterCompleteWithdraw, 0);
+        assertEq(userLentEthAmountAfterOwnerCompleteWithdraw, 10e18);
+        assertEq(address(lendingContract).balance, 10.1e18);
+        assertEq(userEthYieldAfterOwnerCompleteWithdraw, 0.1e18); // ERROR: calculating current USER1 yield as 0.02e18 instead of 0.1e18
+        vm.stopPrank();
     }
 }
