@@ -722,21 +722,20 @@ contract lending is ReentrancyGuard {
                     block.timestamp - lenderIndexOfDepositTimestamps[lender][ethLenderDepositList[lender][i]];
             }
         }
-
         // The lender's total deposit time determines what percentage of their ETH yield is currently claimable (based on a yearly timeframe)
-        uint256 percentageOfEthYieldClaimable = totalTimeEthLent / SECONDS_IN_A_YEAR;
+        uint256 percentageOfEthYieldClaimable = totalTimeEthLent * 1e18 / SECONDS_IN_A_YEAR; // Multiplied by 1e18 to avoid fractions
 
         // The lender's share of lent ETH to the contract determines their claimable percentage of the yield pool (all else equal)
-        uint256 lenderEthShareOfPool = lenderLentEthAmount[lender] / totalLentEth;
+        uint256 lenderEthShareOfPool = lenderLentEthAmount[lender] * 1e18 / totalLentEth; // Multiplied by 1e18 to avoid fractions
 
         // The specific yield amount the lender is entitled to every year assuming all else equal
-        uint256 yearlyLenderEthYield = lenderEthShareOfPool * lendersYieldPool;
+        uint256 yearlyLenderEthYield = (lenderEthShareOfPool * lendersYieldPool) / 1e18; // ensures the number is based off of 1e18
 
         // The current amount of ETH yield the lender can claim based off of:
         //      (1) The length of time the lender's ETH deposits have been in the contract for
         //      (2) What percentage of the contract's lent ETH is from the lender
         //      (3) The amount of borrowing fees accrued (lendersYieldPool)
-        currentClaimableEthYield = yearlyLenderEthYield * percentageOfEthYieldClaimable;
+        currentClaimableEthYield = yearlyLenderEthYield * percentageOfEthYieldClaimable / 1e18; // ensures the number is based off of 1e18
     }
 
     /**
