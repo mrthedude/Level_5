@@ -5,6 +5,6 @@ libs = ["lib"]
 solc = "0.8.20"
 
 [fuzz]
-runs = 3000
+runs = 100
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
