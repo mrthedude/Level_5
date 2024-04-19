@@ -837,6 +837,11 @@ contract lending is ReentrancyGuard {
             userBorrowedEthByMarket[debtor][tokenAddress] + userBorrowingFeesByMarket[debtor][tokenAddress];
     }
 
+    /**
+     * @notice Returns the amount of ETH a lender has deposited into the contract
+     * @param lender The address of the ETH lender
+     * @dev The return value can also include some of the lender's lending yield depending on if they have withdrawn some ETH before
+     */
     function getLenderLentEthAmount(address lender) public view returns (uint256 lentEthAmount) {
         return lenderLentEthAmount[lender];
     }
