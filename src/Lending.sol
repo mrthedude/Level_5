@@ -836,4 +836,8 @@ contract lending is ReentrancyGuard {
         return borrowerEthDebt =
             userBorrowedEthByMarket[debtor][tokenAddress] + userBorrowingFeesByMarket[debtor][tokenAddress];
     }
+
+    function getLenderLentEthAmount(address lender) public view returns (uint256 lentEthAmount) {
+        return lenderLentEthAmount[lender];
+    }
 }
