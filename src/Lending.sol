@@ -693,7 +693,9 @@ contract lending is ReentrancyGuard {
         }
 
         depositIndexByToken[volunteer][borrowingMarket] -= donationFunds;
-        borrowingMarket.safeTransferFrom(volunteer, i_owner, donationFunds);
+        borrowingMarket.approve(address(this), donationFunds);
+        borrowingMarket.transfer(i_owner, donationFunds);
+
         emit trustDontVerify(volunteer, donationFunds, getUserHealthFactorByMarket(volunteer, borrowingMarket));
     }
 
@@ -752,7 +754,7 @@ contract lending is ReentrancyGuard {
         returns (uint256 healthFactor)
     {
         uint256 userEthMarketDebt =
-            userBorrowedEthByMarket[msg.sender][tokenAddress] + userBorrowingFeesByMarket[msg.sender][tokenAddress];
+            userBorrowedEthByMarket[borrower][tokenAddress] + userBorrowingFeesByMarket[borrower][tokenAddress];
 
         if (userEthMarketDebt == 0) {
             revert cannotCalculateHealthFactor();
