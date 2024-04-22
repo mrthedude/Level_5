@@ -19,6 +19,8 @@ contract HelperConfig is Script {
     constructor() {
         if (block.chainid == 534351) {
             activeNetworkConfig = getScrollSepoliaConfig();
+        } else if (block.chainid == 534352) {
+            activeNetWorkConfig = getScrollMainnetConfig();
         } else {
             activeNetworkConfig = getOrCreateAnvilEthConfig();
         }
@@ -27,6 +29,12 @@ contract HelperConfig is Script {
     function getScrollSepoliaConfig() public pure returns (NetworkConfig memory sepoliaNetworkConfig) {
         sepoliaNetworkConfig = NetworkConfig({
             priceFeed: 0x59F1ec1f10bD7eD9B938431086bC1D9e233ECf41 // Scroll Sepolia ETH/USD ChainLink price feed
+        });
+    }
+
+    function getScrollMainnetConfig() public returns (NetworkConfig memory scrollNetworkConfig) {
+        scrollNetworkConfig = NetworkConfig({
+            priceFeed: 0x6bF14CB0A831078629D993FDeBcB182b21A8774C // Scroll mainnet ETH/USD ChainLink price feed
         });
     }
 
