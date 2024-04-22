@@ -917,4 +917,32 @@ contract Lending_Test is Test, lendingDeployer {
         assertEq(contractOwnerEthYield, 0);
         vm.stopPrank();
     }
+
+    ///////////// Testing getUserHealthFactorByMarket() /////////////
+    function test_revertWhen_userHasNoEthMarketDebt() public {
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        vm.expectRevert(lending.cannotCalculateHealthFactor.selector);
+        lendingContract.getUserHealthFactorByMarket(contractOwner, myToken);
+        vm.stopPrank();
+    }
+
+    function testFuzz_healthFactorAccuratelyCalculatesBorrowerPosition(uint256 borrowingAmount) public {
+        vm.assume(borrowingAmount > 0 && borrowingAmount <= 10 ether);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        (bool success,) = address(lendingContract).call{value: 10 ether}("");
+        require(success, "transfer failed");
+        lendingContract.borrow(myToken, borrowingAmount);
+        vm.stopPrank();
+        vm.startPrank(USER1);
+        vm.expectRevert(lending.userIsNotEligibleForPartialLiquidation.selector);
+        lendingContract.getPartialLiquidationSpecs(contractOwner, myToken);
+        vm.stopPrank();
+    }
+    ///////////// Testing getTokenMinimumCollateralizationRatio() /////////////
 }
