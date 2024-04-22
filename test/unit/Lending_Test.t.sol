@@ -999,4 +999,29 @@ contract Lending_Test is Test, lendingDeployer {
         lendingContract.getPartialLiquidationSpecs(USER1, myToken);
         vm.stopPrank();
     }
+
+    ///////////// Testing getBorrowerMarketEthDebt() /////////////
+    function testFuzz_marketEthDebtIsTracked(uint256 borrowAmount) public {
+        vm.assume(borrowAmount > 0 && borrowAmount <= 10 ether);
+        vm.startPrank(contractOwner);
+        (bool success,) = address(lendingContract).call{value: 10 ether}("");
+        require(success, "transfer failed");
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        lendingContract.borrow(myToken, borrowAmount);
+        uint256 marketDebt = lendingContract.getBorrowerMarketEthDebt(contractOwner, myToken);
+        assertEq(borrowAmount * 1.05e18 / 1e18, marketDebt);
+    }
+
+    ///////////// Testing getLenderLentEthAmount() /////////////
+    function testFuzz_lentEthIsTracked(uint256 lentEth) public {
+        vm.assume(lentEth > 0 && lentEth <= STARTING_USER_BALANCE);
+        vm.startPrank(contractOwner);
+        (bool success,) = address(lendingContract).call{value: lentEth}("");
+        require(success, "transfer failed");
+        uint256 amountLent = lendingContract.getLenderLentEthAmount(contractOwner);
+        vm.stopPrank();
+        assertEq(contractOwner.balance, STARTING_USER_BALANCE - amountLent);
+    }
 }
