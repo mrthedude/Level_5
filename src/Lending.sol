@@ -609,6 +609,7 @@ contract lending is ReentrancyGuard {
         if (amountOfEth > lenderEthYield) {
             lendersYieldPool -= lenderEthYield;
             withdrawAmount -= lenderEthYield;
+            totalLentEth -= withdrawAmount;
             lenderLentEthAmount[msg.sender] -= withdrawAmount;
 
             // The timestamps for deposits are set to zero so that the lender can't claim yield off of expired timestamps
