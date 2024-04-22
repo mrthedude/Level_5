@@ -52,8 +52,8 @@ contract HelperConfig is Script {
     }
 
     function getOwnerAddress() public view returns (address _owner) {
-        if (block.chainid == 534351) {
-            // Scroll Sepolia -> burner_addy
+        if (block.chainid == 534351 || block.chainid == 534352) {
+            // Scroll Sepolia OR Scroll Mainnet --> burner_addy
             return 0x6a571992ECaaDe9df63334BACEdD46C7C78e3Ef9;
         }
 
