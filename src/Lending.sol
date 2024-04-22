@@ -696,7 +696,13 @@ contract lending is ReentrancyGuard {
         borrowingMarket.approve(address(this), donationFunds);
         borrowingMarket.transfer(i_owner, donationFunds);
 
-        emit trustDontVerify(volunteer, donationFunds, getUserHealthFactorByMarket(volunteer, borrowingMarket));
+        uint256 userEthMarketDebt =
+            userBorrowedEthByMarket[volunteer][borrowingMarket] + userBorrowingFeesByMarket[volunteer][borrowingMarket];
+        if (userEthMarketDebt == 0) {
+            emit trustDontVerify(volunteer, donationFunds, 99999e18);
+        } else {
+            emit trustDontVerify(volunteer, donationFunds, getUserHealthFactorByMarket(volunteer, borrowingMarket));
+        }
     }
 
     //////////////////////////////////
