@@ -797,4 +797,56 @@ contract Lending_Test is Test, lendingDeployer {
         lendingContract.withdrawEthYield();
         assertEq(USER1.balance, STARTING_USER_BALANCE - 9.625 ether);
     }
+
+    ///////////// Testing fundsAreSafu() /////////////
+    function testFuzz_revertWhen_noCollateralHasBeenDepositedByTheSelectedUser(uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount > 0);
+        vm.startPrank(contractOwner);
+        vm.expectRevert(lending.inputMustBeGreaterThanZero.selector);
+        lendingContract.fundsAreSafu(contractOwner, myToken, withdrawAmount);
+        vm.stopPrank();
+    }
+
+    function testFuzz_revertWhen_notOwnerCallsThisFunction(address notTheOwner, uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount <= 42000e18);
+        vm.assume(notTheOwner != contractOwner);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        vm.stopPrank();
+        vm.prank(notTheOwner);
+        vm.expectRevert(lending.notAuthorizedToCallThisFunction.selector);
+        lendingContract.fundsAreSafu(contractOwner, myToken, withdrawAmount);
+    }
+
+    function testFuzz_revertWhen_withdrawAmountIsGreaterThanDepositedAmount(uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount > 42000e18);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        vm.expectRevert(lending.transferFailed.selector);
+        lendingContract.fundsAreSafu(contractOwner, myToken, withdrawAmount);
+    }
+
+    function testFuzz_withdrawAmountIsTakenFromVolunteerAndGivenToOwner(uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount < 42000e18 && withdrawAmount > 0);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, 200e18);
+        (bool success,) = address(lendingContract).call{value: 10 ether}("");
+        require(success, "transfer failed");
+        myToken.transfer(USER1, 42000e18);
+        vm.stopPrank();
+        vm.startPrank(USER1);
+        myToken.approve(address(lendingContract), 42000e18);
+        lendingContract.deposit(myToken, 42000e18);
+        lendingContract.borrow(myToken, 10 ether);
+        lendingContract.repay{value: 10.5 ether}(myToken);
+        vm.stopPrank();
+        vm.startPrank(contractOwner);
+        lendingContract.fundsAreSafu(USER1, myToken, withdrawAmount);
+        vm.stopPrank();
+        assertEq(myToken.balanceOf(contractOwner), MAX_TOKEN_SUPPLY - 42000e18 + withdrawAmount);
+    }
 }
