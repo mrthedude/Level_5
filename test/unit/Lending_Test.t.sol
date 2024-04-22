@@ -945,4 +945,21 @@ contract Lending_Test is Test, lendingDeployer {
         vm.stopPrank();
     }
     ///////////// Testing getTokenMinimumCollateralizationRatio() /////////////
+
+    function test_revertWhen_tokenIsNotOnTheAllowList() public {
+        vm.startPrank(contractOwner);
+        vm.expectRevert(lending.notEligibleAsCollateral.selector);
+        lendingContract.getTokenMinimumCollateralizationRatio(myToken);
+    }
+
+    function testFuzz_retrievesCollateralizationRatioAccurately(uint256 MCR) public {
+        vm.assume(MCR != 0);
+        vm.startPrank(contractOwner);
+        lendingContract.allowTokenAsCollateral(myToken, MCR);
+        uint256 myTokenCollateralizationRatio = lendingContract.getTokenMinimumCollateralizationRatio(myToken);
+        vm.stopPrank();
+        assertEq(myTokenCollateralizationRatio, MCR);
+    }
+
+    ///////////// Testing getPartialLiquidationSpecs() /////////////
 }
