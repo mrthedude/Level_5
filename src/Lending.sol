@@ -834,15 +834,15 @@ contract lending is ReentrancyGuard {
     /**
      * @notice Calculates a borrower's total ETH debt for a specific collateral market
      * @param debtor The address of the borrower whose ETH debt is being queried
-     * @param tokenAddress The ERC20 token collateral market where the borrower has an open debt position
+     * @param borrowingMarket The ERC20 token collateral market where the borrower has an open debt position
      */
-    function getBorrowerMarketEthDebt(address debtor, IERC20 tokenAddress)
+    function getBorrowerMarketEthDebt(address debtor, IERC20 borrowingMarket)
         public
         view
         returns (uint256 borrowerEthDebt)
     {
         return borrowerEthDebt =
-            userBorrowedEthByMarket[debtor][tokenAddress] + userBorrowingFeesByMarket[debtor][tokenAddress];
+            userBorrowedEthByMarket[debtor][borrowingMarket] + userBorrowingFeesByMarket[debtor][borrowingMarket];
     }
 
     /**
