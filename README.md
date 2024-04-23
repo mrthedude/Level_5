@@ -2,6 +2,10 @@
 
 **This is a lending and borrowing contract where users can lend ETH to the contract and claim in-kind yield from borrowers who deposit approved ERC20 tokens as collateral. The contract has basic liquidation functionality, can freeze and unfreeze borrowing markets, and integrates a Chainlink ETH/USD price feed for updated LTV ratios on open debt positions. All ERC20 collateral tokens are treated as having a fixed price of $1/token for simplicity**
 
+## DEPLOYMENT CLI COMMAND:
+
+forge script script/_insert_deployment_script_file_here_ --rpc-url $_insert_rpc_here_ --account _insert_account_here_ --sender _insert_public_key_here_ --verify --etherscan-api-key $_insert_block_explorer_api_key_here_ --broadcast -vvvv
+
 ## Contract Descriptions:
 
 - **ERC20_token.sol**: An ERC20 token that serves as an initial accepted collateral for the `Lending.sol` contract to lend deposited ETH against
