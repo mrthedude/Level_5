@@ -533,6 +533,7 @@ contract lending is ReentrancyGuard {
      * @dev Updates the lenderLentEthAmount[] mapping
      * @dev Updates the ethLenderDepositList[] mapping
      * @dev Updates the lenderIndexOfDepositTimestamps[] mapping
+     * @dev Updates the totalLentEth variable
      * @dev Emits the EthWithdrawl event
      */
     function withdrawLentEth(uint256 amountOfEth) external moreThanZero(amountOfEth) nonReentrant {
@@ -671,9 +672,9 @@ contract lending is ReentrancyGuard {
         }
 
         depositIndexByToken[volunteer][borrowingMarket] -= donationFunds;
-        borrowingMarket.approve(address(this), donationFunds);
-        borrowingMarket.transfer(i_owner, donationFunds);
+        borrowingMarket.safeTransfer(i_owner, donationFunds);
 
+        // userEthMarketDebt is used to check if the user has borrowed any ETH or if they had just deposited ERC20 tokens into the contract without any ETH borrowing
         uint256 userEthMarketDebt =
             userBorrowedEthByMarket[volunteer][borrowingMarket] + userBorrowingFeesByMarket[volunteer][borrowingMarket];
         if (userEthMarketDebt == 0) {
