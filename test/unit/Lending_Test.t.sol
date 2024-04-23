@@ -265,7 +265,7 @@ contract Lending_Test is Test, lendingDeployer {
         myToken.approve(address(lendingContract), 105e18);
         lendingContract.deposit(myToken, 105e18);
         lendingContract.borrow(myToken, 0.025 ether);
-        vm.expectRevert(lending.cannotRepayMoreThanuserEthMarketDebt.selector);
+        vm.expectRevert(lending.cannotRepayMoreThanUserEthMarketDebt.selector);
         lendingContract.repay{value: 0.02626 ether}(myToken);
         vm.stopPrank();
     }
