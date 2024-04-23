@@ -10,12 +10,10 @@
 
   **priceConverter.sol**: Uses the provided Chainlink ETH/USD price feed to convert any amount of ETH to its current dollar value
 
-- **HelperConfig.s.sol**:
+- **HelperConfig.s.sol**: Helper contract to programmatically configure contract deployments based on the chainId where the contract is being deployed to
 
 - **Deploy_Lending.s.sol**: Modular deployment contract that deploys `Lending.sol` and `ERC20_token.sol` with constructor parameters that are programmatically determinded in `HelperConfig.s.sol`, allowing for local testing as well as production deployments.
 
-- **InteractionsTest.t.sol**:
+  **Lending_Test.t.sol**: Unit tests on `Lending.sol` to verify the functionality of the code and if the logic causes the intended outcomes
 
-  **Lending_Test.t.sol**:
-
-  **MockV3Aggregator.t.sol**:
+  **MockV3Aggregator.t.sol**: Mock/fake Chainlink ETH/USD pricefeed, used for testing the `Lending.sol` contract functions in the `Lending_Test.t.sol` file
