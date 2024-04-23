@@ -23,9 +23,9 @@
  */
 pragma solidity ^0.8.0;
 
-//////////////////
-//// Imports ////
-/////////////////
+/////////////////////////////////////////////
+//// Interfaces, Imports, and Contracts ////
+////////////////////////////////////////////
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
@@ -33,19 +33,13 @@ import {priceConverter} from "./priceConverter.sol";
 import {AggregatorV3Interface} from
     "lib/chainlink-brownie-contracts/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-/////////////////////
-//// Libraries ////
-////////////////////
 using SafeERC20 for IERC20;
 
-////////////////////
-//// Contracts ////
-///////////////////
 /**
  * @title lending
  * @author mrthedude
  * @notice This lending and borrowing contract allows users to lend ETH and earn yield from borrowers taking collateralized loans with approved ERC20 tokens
- * @dev Uses a Chainlink ETH/USD pricefeed oracle to update LTVs on outstanding borrowing positions
+ * @dev Uses a Chainlink ETH/USD pricefeed oracle to update LTVs on open borrowing positions
  * @dev Incorporates a fixed borrowing fee of 5% the amount of ETH borrowed and considers the value of each collateralized ERC20 token to be $1 per token for simplicity
  * @dev Uses ReentrancyGuard, SafeERC20, IERC20 contracts from OpenZepplin to mitigate contract attack surface
  */
@@ -81,12 +75,12 @@ contract lending is ReentrancyGuard {
     address public immutable i_owner;
     /// @dev Chainlink ETH/USD price feed
     AggregatorV3Interface private immutable i_ethUsdPriceFeed;
-    /// @notice Fixed borrowing fee to be paid in ETH before the deposited collateral can be withdrawn by the borrower
+    /// @notice Fixed borrowing fee charged every time lent ETH is borrowed by a user
     uint256 public constant BORROW_FEE = 0.05e18; // 5% fee on the amount of ETH borrowed per borrow() function call
     /// @notice Used to calculate when a borrower's LTV is eligible for full liquidation --> position's health factor <= minimum collateralization ratio - 30%
     uint256 public constant FULL_LIQUIDATION_THRESHOLD = 0.3e18; // Market's minimum collateralization ratio - 30%
     /// @notice Variable specifying the number of seconds in a year to avoid extra clutter in the codebase
-    uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // (60sec * 60mins * 24hrs * 365days)
+    uint256 public constant SECONDS_IN_A_YEAR = 31536000 seconds; // 60sec * 60mins * 24hrs * 365days
     /// @notice Accounts for the total amount of fees that lenders can claim on a pro-rata basis. Updated with every borrow() function call and ETH claim from lenders
     uint256 public lendersYieldPool;
     /// @notice The total amount of ETH that lenders have deposited into the contract
