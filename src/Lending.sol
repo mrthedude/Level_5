@@ -85,9 +85,9 @@ contract lending is ReentrancyGuard {
     uint256 public lendersYieldPool;
     /// @notice The total amount of ETH that lenders have deposited into the contract
     uint256 public totalLentEth;
-    /// @notice Dynamic array of ERC20 token addresses that are eligible to be deposited as collateral to borrow lent ETH against
-    IERC20[] public allowedTokens;
 
+    /// @notice Tracks what ERC20 token addresses are eligible to be deposited as collateral to borrow lent ETH against
+    mapping(IERC20 tokenAddress => bool inAllowedList) public allowedTokensList;
     /// @notice Tracks the deposit balances of the ERC20 tokens a user has supplied to the contract as borrowing collateral
     mapping(address user => mapping(IERC20 tokenAddress => uint256 amountDeposited)) public depositIndexByToken;
     /// @notice Tracks the amount of ETH a user has borrowed in each collateral market
@@ -137,16 +137,10 @@ contract lending is ReentrancyGuard {
      * @notice Modifier to check if an ERC20 token is eligible to be used as collateral for borrowing lent ETH
      * @param tokenAddress The address of the ERC20 token being checked for collateral eligibility
      * @dev Used in the following functions: removeTokenAsCollateral(), deposit(), withdraw(), borrow(), freezeBorrowingMarket(), UnfreezeBorrowingMarket() getTokenMinimumCollateralizationRatio()
-     * @dev Reverts with the notEligibleAsCollateral error if the ERC20 token is not in the allowedTokens[] array
+     * @dev Reverts with the notEligibleAsCollateral error if the allowedTokensList[ERC20_token] == false
      */
     modifier isAllowedToken(IERC20 tokenAddress) {
-        bool included = false;
-        for (uint256 i = 0; i < allowedTokens.length; i++) {
-            if (allowedTokens[i] == tokenAddress) {
-                included = true;
-            }
-        }
-        if (included == false) {
+        if (allowedTokensList[tokenAddress] == false) {
             revert notEligibleAsCollateral();
         }
         _;
@@ -195,7 +189,7 @@ contract lending is ReentrancyGuard {
     ////////////////////////////////
     /**
      * @notice Sets the i_owner and i_ethUsdPriceFeed of the lending contract upon deployment
-     * @param owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket()
+     * @param owner Sets the address that will have special prvileges for certain function calls --> allowTokenAsCollateral(), removeTokenAsCollateral(), freezeBorrowingMarket(), UnfreezeBorrowingMarket(), fundsAreSafu()
      * @param priceFeed Sets the Chainlink ETH/USD price feed that will be used to determine the LTVs of open debt positions
      */
 
@@ -244,14 +238,14 @@ contract lending is ReentrancyGuard {
      * @param tokenAddress The ERC20 token that is being added to the eligible collateral list
      * @param minimumCollateralRatio The minimum collateralization ratio allowed for open debt positions, falling below this makes the position eligible for liquidation
      * @dev Only the i_owner is able to call this function
-     * @dev Updates the minimumCollateralizationRatio mapping for this ERC20 token collateral, setting the market's borrowing ratio limit
-     * @dev Updates the allowedTokens array
+     * @dev Updates the minimumCollateralizationRatio mapping for this ERC20 token collateral, setting the market's borrowing limit before liquidation penalties
+     * @dev Updates the allowedTokensList[tokenAddress] to true
      * @dev Updates the BorrowingMarketFrozen[tokenAddress] to false, allowing new borrowing positions to be created against this collateral
      * @dev Emits the AllowedTokenSet event
      */
     function allowTokenAsCollateral(IERC20 tokenAddress, uint256 minimumCollateralRatio) external onlyOwner {
         minimumCollateralizationRatio[tokenAddress] = minimumCollateralRatio;
-        allowedTokens.push(tokenAddress);
+        allowedTokensList[tokenAddress] = true;
         frozenBorrowingMarket[tokenAddress] = false;
         emit AllowedTokenSet(tokenAddress, minimumCollateralRatio);
     }
@@ -261,6 +255,7 @@ contract lending is ReentrancyGuard {
      * @param tokenAddress The ERC20 token that is being removed from the eligible collateral list
      * @dev Only the i_owner is able to call this function
      * @dev Reverts with the cannotRemoveFromAllowedTokensListWhenCollateralIsInContract error if the collateral market being removed has tokens deposited into the contract
+     * @dev Updates the allowedTokensList[tokenAddress] to false
      * @dev Updates the BorrowingMarketFrozen[tokenAddress] to true, prohibiting the creation of new borrowing positions against this collateral
      * @dev Emits the RemovedTokenSet event
      */
@@ -268,15 +263,7 @@ contract lending is ReentrancyGuard {
         if (tokenAddress.balanceOf(address(this)) != 0) {
             revert cannotRemoveFromAllowedTokensListWhenCollateralIsInContract();
         }
-        uint256 arrayIndex;
-        for (uint256 i = 0; i < allowedTokens.length; i++) {
-            if (allowedTokens[i] == tokenAddress) {
-                arrayIndex = i;
-                break;
-            }
-        }
-        allowedTokens[arrayIndex] = allowedTokens[allowedTokens.length - 1];
-        allowedTokens.pop();
+        allowedTokensList[tokenAddress] = false;
         frozenBorrowingMarket[tokenAddress] = true;
         emit RemovedTokenSet(tokenAddress);
     }
@@ -286,7 +273,7 @@ contract lending is ReentrancyGuard {
      * @param tokenAddress The ERC20 token that is being deposited into the lending contract
      * @param amount The number of ERC20 tokens being deposited
      * @dev Reentrancy guard is active on this function
-     * @dev Only ERC20 tokens in the allowedTokens[] array may be deposited
+     * @dev Only approved ERC20 tokens may be deposited
      * @dev The amount deposited must be greater than zero
      * @dev Cannot deposit ERC20 tokens whose market has been frozen
      * @dev Updates the depositIndexByToken[] array
@@ -325,8 +312,7 @@ contract lending is ReentrancyGuard {
             revert cannotWithdrawMoreCollateralThanWhatWasDeposited();
         }
         depositIndexByToken[msg.sender][tokenAddress] -= amount;
-        tokenAddress.approve(address(this), amount);
-        tokenAddress.safeTransferFrom(address(this), msg.sender, amount);
+        tokenAddress.safeTransfer(msg.sender, amount);
         emit Withdraw(msg.sender, tokenAddress, amount);
     }
 
@@ -336,7 +322,7 @@ contract lending is ReentrancyGuard {
      * @param ethBorrowAmount The amount of ETH the user specifies to borrow
      * @param tokenCollateral The deposited ERC20 token collateral that the ETH is being borrowed against
      * @dev Reentrancy guard is active on this function
-     * @dev Only user-deposited ERC20 tokens in the allowedTokens[] array may be borrowed against
+     * @dev Only approved ERC20 tokens may be borrowed against
      * @dev The amount being borrowed must be greater than zero
      * @dev Cannot open a new debt position if the borrowing market is frozen
      * @dev Reverts with the notEnoughEthInContract error if the ethBorrowAmount exceeds the amount of ETH held in the contract
@@ -503,7 +489,7 @@ contract lending is ReentrancyGuard {
      * @notice Allows the i_owner to close (freeze) an ERC20 token borrowing market, preventing the creation of new borrowing positions against this collateral
      * @param market The ERC20 token borrowing market being frozen
      * @dev Only the i_owner is able to call this function
-     * @dev Only ERC20 tokens in the allowedTokens[] array can be selected for a market freeze
+     * @dev Only approved ERC20 tokens may be selected for a market freeze
      * @dev Reverts with the borrowingMarketHasAlreadyBeenFrozen error if called on a market that has already been frozen
      * @dev Updates the frozenBorrowingMarket[market] to true, preventing new borrowing positions from being opened against this ERC20 token collateral
      * @dev Emits the BorrowingMarketFrozen event
@@ -520,7 +506,7 @@ contract lending is ReentrancyGuard {
      * @notice Allows the i_owner to open (unfreeze) an ERC20 token borrowing market, enabling the creation of new borrowing positions against this collateral
      * @param market The ERC20 token borrowing market being unfrozen
      * @dev Only the i_owner is able to call this function
-     * @dev Only ERC20 tokens in the allowedTokens[] array can be selected for a makert unfreeze
+     * @dev Only approved ERC20 tokens may be selected for a makert unfreeze
      * @dev Reverts with the borrowingMarketIsCurrentlyActive error if called on a market that is not frozen
      * @dev Updates the frozenBorrowingMarket[market] to false, enabling new borrowing positions to be opened against this ERC20 token collateral
      * @dev Emits the BorrowingMarketHasBeenUnfrozen event
@@ -768,7 +754,7 @@ contract lending is ReentrancyGuard {
      * @notice Returns the minimum collateralization ratio for an approved ERC20 token borrowing market
      * @notice If a borrower has a debt position whose health factor falls below its market's minimum ratio, their collateral becomes eligible for liquidation (seizure)
      * @param tokenAddress The ERC20 token collateral market whose minimum collateralization ratio is being queried
-     * @dev Only ERC20 tokens in the allowedTokens[] array have borrowing markets with minimum collateralization ratios
+     * @dev Only approved ERC20 tokens have borrowing markets with minimum collateralization ratios
      */
     function getTokenMinimumCollateralizationRatio(IERC20 tokenAddress)
         public
