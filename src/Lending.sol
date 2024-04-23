@@ -437,15 +437,15 @@ contract lending is ReentrancyGuard {
 
     /**
      * @notice Allows for the partial liquidation (seizure) of borrowers' deposited collateral if the debt position's health factor falls slightly below that market's minimum collateralization ratio (MCR)
-     * @notice The positions's LTV must be less than 30% below the MRC to be eligible for partial liquidation (i.e. borrower's health factor is 121% and the MCR is 150%)
+     * @notice The positions's LTV must be less than 30% below the MRC to be eligible for partial liquidation (i.e. borrower's health factor is 106% and the MCR is 150%)
      * @notice The liquidator must partially repay the borrower's ETH debt for that specific market in order to claim a percentage of their deposited collateral
      * @notice The liquidator must repay enough of the borrower's debt as to reset their position's LTV to the market's MCR + 100%
      * @notice After repaying this amount of debt, the liquidator claims the same dollar amount of collateral paid down + 5% as payment
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param borrowingMarket The ERC20 token borrowing market where the collateral is being liquidated
      * @dev The msg.value must be greater than zero
-     * @dev Refer to the getPartialLiquidationSpecs() function for logic-- Reverts with the userIsNotEligibleForPartialLiquidation error if the debtor's health factor is not
-     * below the MCR for that borrowing market OR if the debtor's health factor is at or lower than the market's MCR - 30% (i.e. borrower's health factor is 120% and the MCR is 150%)
+     * @dev Reverts with the userIsNotEligibleForPartialLiquidation error if the debtor's health factor is not below the MCR for that borrowing market OR
+     * if the debtor's health factor is at or lower than the market's MCR - 30% (i.e. borrower's health factor is 120% and the MCR is 150%) ~~ Refer to the getPartialLiquidationSpecs() function for logic
      * @dev Reverts with the correctDebtAmountMustBeRepaid error if the msg.value doesn't match the amount necessary to reset the borrower's LTV to the market's MCR + 100%
      * @dev Updates the userBorrowedEthByMarket mapping
      * @dev Updates the userBorrowingFeesByMarket mapping
@@ -479,8 +479,7 @@ contract lending is ReentrancyGuard {
 
         userBorrowedEthByMarket[debtor][borrowingMarket] -= amountOfDebtToPayOffInEth;
         depositIndexByToken[debtor][borrowingMarket] -= liquidatorPayment;
-        borrowingMarket.approve(address(this), liquidatorPayment);
-        borrowingMarket.safeTransferFrom(address(this), msg.sender, liquidatorPayment);
+        borrowingMarket.safeTransfer(msg.sender, liquidatorPayment);
         emit PartialLiquidation(debtor, borrowingMarket, liquidatorPayment);
     }
 
