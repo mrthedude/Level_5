@@ -53,7 +53,7 @@ contract lending is ReentrancyGuard {
     error notAuthorizedToCallThisFunction();
     error cannotWithdrawCollateralWithOpenDebtPositions();
     error cannotRemoveFromAllowedTokensListWhenCollateralIsInContract();
-    error cannotRepayMoreThanuserEthMarketDebt();
+    error cannotRepayMoreThanUserEthMarketDebt();
     error transferFailed();
     error notEnoughEthInContract();
     error notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth();
@@ -371,7 +371,7 @@ contract lending is ReentrancyGuard {
 
     /**
      * @notice Allows users to repay ETH borrowed from collateral markets in the lending contract
-     * @dev Reverts with the cannotRepayMoreThanuserEthMarketDebt error if the msg.value is greater than the user's total ETH debt in that borrowing market
+     * @dev Reverts with the cannotRepayMoreThanUserEthMarketDebt error if the msg.value is greater than the user's total ETH debt in that borrowing market
      * @dev The msg.value must be greater than zero
      * @dev The userBorrowingFeesByMarket[] mapping is prioritized in the case that the msg.value is <= the user's borrowing fees in that market
      * @dev Updates the userBorrowingFeesByMarket mapping
@@ -383,7 +383,7 @@ contract lending is ReentrancyGuard {
             + userBorrowingFeesByMarket[msg.sender][collateralMarket];
         uint256 repaymentAmount = msg.value;
         if (userEthMarketDebt < repaymentAmount) {
-            revert cannotRepayMoreThanuserEthMarketDebt();
+            revert cannotRepayMoreThanUserEthMarketDebt();
         }
         if (repaymentAmount <= userBorrowingFeesByMarket[msg.sender][collateralMarket]) {
             userEthMarketDebt -= repaymentAmount; // tracks the user's market debt for the Repay event
@@ -401,7 +401,7 @@ contract lending is ReentrancyGuard {
 
     /**
      * @notice Allows for the complete liquidation (seizure) of borrowers' deposited collateral if the debt position's health factor falls significantly below that market's minimum collateralization ratio (MCR)
-     * @notice The position's LTV must be at least 30% below the MCR to become eligible for full liquidation (i.e. borrower's health factor is 120% and the MCR is 150%)
+     * @notice The position's LTV must be at least 30% below the MCR to become eligible for full liquidation (i.e. borrower's health factor is 105% and the MCR is 150%)
      * @notice The liquidator must repay the borrower's entire ETH debt for that specific market in order to take possession of their deposited collateral
      * @param debtor The address of the user who is eligible to have their collateral liquidated
      * @param borrowingMarket The ERC20 token borrowing market where the collateral is being liquidated
@@ -431,8 +431,7 @@ contract lending is ReentrancyGuard {
         depositIndexByToken[debtor][borrowingMarket] = 0;
         userBorrowedEthByMarket[msg.sender][borrowingMarket] = 0;
         userBorrowingFeesByMarket[msg.sender][borrowingMarket] = 0;
-        borrowingMarket.approve(address(this), collateralAmount);
-        borrowingMarket.safeTransferFrom(address(this), msg.sender, collateralAmount);
+        borrowingMarket.safeTransfer(msg.sender, collateralAmount);
         emit CompleteLiquidation(debtor, borrowingMarket, collateralAmount);
     }
 
