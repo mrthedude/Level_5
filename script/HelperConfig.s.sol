@@ -20,7 +20,7 @@ contract HelperConfig is Script {
         if (block.chainid == 534351) {
             activeNetworkConfig = getScrollSepoliaConfig();
         } else if (block.chainid == 534352) {
-            activeNetWorkConfig = getScrollMainnetConfig();
+            activeNetworkConfig = getScrollMainnetConfig();
         } else {
             activeNetworkConfig = getOrCreateAnvilEthConfig();
         }
