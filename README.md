@@ -4,7 +4,7 @@
 
 ## DEPLOYMENT CLI COMMAND:
 
-forge script script/_insert_deployment_script_file_here_ --rpc-url $_insert_rpc_here_ --account _insert_account_here_ --sender _insert_public_key_here_ --verify --etherscan-api-key $_insert_block_explorer_api_key_here_ --broadcast -vvvv
+forge script script/_<INSERT_SCRIPTNAME_HERE>_ --rpc-url $_<INSERT_RPC_URL_HERE>_ --account _<INSERT_ACCOUNTNAME_HERE>_ --sender _<INSERT_ADDRESS_FOR_THE_ACCOUNT_HERE>_ --verify --etherscan-api-key $_<INSERT_BLOCKEXPLORER_APIKEY_HERE>_ --broadcast -vvvv
 
 ## Contract Descriptions:
 
