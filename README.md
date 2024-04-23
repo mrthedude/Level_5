@@ -8,9 +8,9 @@ forge script script/_insert_deployment_script_file_here_ --rpc-url $_insert_rpc_
 
 ## Contract Descriptions:
 
-- **ERC20_token.sol**: An ERC20 token that serves as an initial accepted collateral for the `Lending.sol` contract to lend deposited ETH against
+- **ERC20_token.sol**: An ERC20 token that serves as an initial accepted collateral for the `Lending.sol` contract to lend deposited ETH against (testnet deployed `_LVL_5` token contract address: `0xdf00f5F0AAbee88553d8DC7a2c516F0552D4D6CA`)
 
-- **Lending.sol**: A lending and borrowing contract with basic liquidation mechanics, lending yield, and an integrated Chainlink ETH/USD price feed to provide real-time LTV's for users. This contract uses approved ERC20 tokens as collateral to borrow deposited ETH against with a market-specific minimum collateralization ratios governing the borrowing limits. ETH lenders are compensated through in-kind yield derived from borrowing activity, their share of the total amount of ETH lent to the contract, and the length of time that their ETH has been deposited into the contract for.
+- **Lending.sol**: A lending and borrowing contract with basic liquidation mechanics, lending yield, and an integrated Chainlink ETH/USD price feed to provide real-time LTV's for users. This contract uses approved ERC20 tokens as collateral to borrow deposited ETH against with a market-specific minimum collateralization ratios governing the borrowing limits. ETH lenders are compensated through in-kind yield derived from borrowing activity, their share of the total amount of ETH lent to the contract, and the length of time that their ETH has been deposited into the contract for. (testnet deployed `lending` contract address: `0x987793c95db37EE430d237e086C8A341B510Be10`)
 
   **priceConverter.sol**: Uses the provided Chainlink ETH/USD price feed to convert any amount of ETH to its current dollar value
 
