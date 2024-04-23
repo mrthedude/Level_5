@@ -32,7 +32,7 @@ contract HelperConfig is Script {
         });
     }
 
-    function getScrollMainnetConfig() public returns (NetworkConfig memory scrollNetworkConfig) {
+    function getScrollMainnetConfig() public pure returns (NetworkConfig memory scrollNetworkConfig) {
         scrollNetworkConfig = NetworkConfig({
             priceFeed: 0x6bF14CB0A831078629D993FDeBcB182b21A8774C // Scroll mainnet ETH/USD ChainLink price feed
         });
