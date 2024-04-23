@@ -33,8 +33,6 @@ import {priceConverter} from "./priceConverter.sol";
 import {AggregatorV3Interface} from
     "lib/chainlink-brownie-contracts/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-using SafeERC20 for IERC20;
-
 /**
  * @title lending
  * @author mrthedude
@@ -44,6 +42,8 @@ using SafeERC20 for IERC20;
  * @dev Uses ReentrancyGuard, SafeERC20, IERC20 contracts from OpenZepplin to mitigate contract attack surface
  */
 contract lending is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
     /////////////////
     //// Errors ////
     ////////////////
