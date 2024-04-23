@@ -326,7 +326,7 @@ contract lending is ReentrancyGuard {
      * @dev The amount being borrowed must be greater than zero
      * @dev Cannot open a new debt position if the borrowing market is frozen
      * @dev Reverts with the notEnoughEthInContract error if the ethBorrowAmount exceeds the amount of ETH held in the contract
-     * @dev Reverts with the notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth error if the borrow request will cause the user's market-specific health factor to fall below the minimum collateralization ratio for that borrowing market
+     * @dev Reverts with the notEnoughCollateralDepositedByUserToBorrowThisAmountOfEth error if the borrow request will cause the user's health factor to fall below that market's minimum collateralization ratio
      * @dev Updates the userBorrowedEthByMarket mapping
      * @dev Updates the userBorrowingFeesByMarket mapping
      * @dev Updates the lendersYieldPool variable
